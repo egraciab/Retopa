@@ -1,6 +1,18 @@
-node_modules/
+# Env
 .env
-.env.*
+
+# Node
+node_modules/
+
+# Data
+data/
+*.csv
+
+# Backups
+backups/
+
+# Logs
 *.log
-docker-data/
-postgres-data/
+
+# OS
+.DS_Store
