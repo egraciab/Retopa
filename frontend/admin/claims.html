@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>RETOPA Admin - Claims</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+    .topbar { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; }
+    button { padding: 6px 10px; margin-right: 6px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <a href="/admin/businesses.html">Volver a negocios</a>
+    <button id="logoutBtn">Salir</button>
+  </div>
+
+  <h1>Claims</h1>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Business</th>
+        <th>Solicitante</th>
+        <th>Email</th>
+        <th>Mensaje</th>
+        <th>Estado</th>
+        <th>Acción</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <script src="/admin/js/config.js"></script>
+  <script src="/admin/js/auth.js"></script>
+  <script>
+    async function updateClaim(id, status) {
+      const res = await fetch(`${window.RETOPA_API_BASE}/admin/claims/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders()
+        },
+        body: JSON.stringify({ status })
+      });
+
+      if (res.ok) {
+        await loadClaims();
+      } else {
+        alert('No se pudo actualizar el claim');
+      }
+    }
+
+    async function loadClaims() {
+      const res = await fetch(`${window.RETOPA_API_BASE}/admin/claims`, {
+        headers: {
+          ...authHeaders()
+        }
+      });
+
+      const json = await res.json();
+      const tbody = document.getElementById('rows');
+      tbody.innerHTML = '';
+
+      (json.data || []).forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${item.id}</td>
+          <td>${item.business_name || ''}</td>
+          <td>${item.full_name || ''}</td>
+          <td>${item.email || ''}</td>
+          <td>${item.message || ''}</td>
+          <td>${item.status}</td>
+          <td>
+            <button onclick="updateClaim(${item.id}, 'approved')">Aprobar</button>
+            <button onclick="updateClaim(${item.id}, 'rejected')">Rechazar</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function init() {
+      const user = await requireSession();
+      if (!user) return;
+      await loadClaims();
+    }
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      clearToken();
+      window.location.href = '/admin/login.html';
+    });
+
+    init();
+  </script>
+</body>
+</html>

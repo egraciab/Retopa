@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>RETOPA Admin - Negocios</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    .topbar { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; }
+    input, button, a { padding: 8px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <strong id="userInfo">Cargando...</strong>
+    <a href="/admin/claims.html">Ver claims</a>
+    <button id="logoutBtn">Salir</button>
+  </div>
+
+  <h1>Negocios</h1>
+  <a href="/admin/business-create.html">+ Nuevo negocio</a>
+  <input type="text" id="q" placeholder="Buscar por nombre o dirección" />
+  <button id="searchBtn">Buscar</button>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Nombre</th>
+        <th>Ciudad</th>
+        <th>Categoría</th>
+        <th>Claimed</th>
+        <th>Activo</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <script src="/admin/js/config.js"></script>
+  <script src="/admin/js/auth.js"></script>
+  <script>
+    async function loadBusinesses() {
+      const q = document.getElementById('q').value.trim();
+      const url = new URL(`${window.location.origin}${window.RETOPA_API_BASE}/admin/businesses`);
+      if (q) url.searchParams.set('q', q);
+
+      const res = await fetch(url, {
+        headers: {
+          ...authHeaders()
+        }
+      });
+
+      const json = await res.json();
+      const tbody = document.getElementById('rows');
+      tbody.innerHTML = '';
+
+      (json.data || []).forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${item.id}</td>
+          <td><a href="/admin/business-edit.html?id=${item.id}">${item.name}</a></td>
+          <td>${item.city || ''}</td>
+          <td>${item.category || ''}</td>
+          <td>${item.claimed}</td>
+          <td>${item.is_active}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function init() {
+      const user = await requireSession();
+      if (!user) return;
+
+      document.getElementById('userInfo').textContent = `${user.full_name} (${user.role})`;
+      await loadBusinesses();
+    }
+
+    document.getElementById('searchBtn').addEventListener('click', loadBusinesses);
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      clearToken();
+      window.location.href = '/admin/login.html';
+    });
+
+    init();
+  </script>
+</body>
+</html>

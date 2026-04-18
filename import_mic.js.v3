@@ -1,0 +1,122 @@
+const fs = require('fs');
+const path = require('path');
+
+const API_URL = 'http://10.10.50.10/api/admin/businesses';
+const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsImVtYWlsIjoiYWRtaW5AcmV0b3BhLmxvY2FsIiwicm9sZSI6InN1cGVyYWRtaW4iLCJmdWxsX25hbWUiOiJFc3RlYmFuIEFkbWluIiwiaWF0IjoxNzc1MTY1ODk5LCJleHAiOjE3NzUxOTQ2OTl9.O1yb0V-8LqujaMGPCgQAYk8U2cvX9PPmSBc3N6Sv9b4';
+
+// ===== MAPEO =====
+const cityMap = {
+  'ASUNCION': 1,
+  'LUQUE': 1,
+  'LAMBARE': 1,
+  'FERNANDO DE LA MORA': 1,
+  'SAN BERNARDINO': 1,
+  'LOMA PLATA': 1
+};
+
+// ===== HELPERS =====
+function cleanText(text) {
+  if (!text) return null;
+  return text.trim().replace(/"/g, '');
+}
+
+function normalizeRuc(ruc) {
+  if (!ruc) return null;
+  return ruc.replace(/[^\d]/g, '');
+}
+
+// 🔥 NUEVO: log más claro
+function log(msg, extra = '') {
+  console.log(`[IMPORT] ${msg}`, extra);
+}
+
+// ===== API =====
+async function createBusiness(data) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${TOKEN}`
+    },
+    body: JSON.stringify(data)
+  });
+
+  if (res.status === 409) {
+    log('RUC duplicado → skip', data.ruc);
+    return 'duplicate';
+  }
+
+  if (!res.ok) {
+    log('Error API', await res.text());
+    return 'error';
+  }
+
+  const json = await res.json();
+  log('Creado', `${json.data.name} (${data.ruc})`);
+  return 'ok';
+}
+
+// ===== MAIN =====
+async function run() {
+  const file = fs.readFileSync(path.join(__dirname, 'mic_full.csv'), 'utf-8');
+  const lines = file.split('\n');
+
+  lines.shift(); // header
+
+  let created = 0;
+  let skipped = 0;
+  let duplicates = 0;
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    const cols = line.split(';');
+
+    const estado = cols[4];
+    if (estado !== 'ACTIVO') continue;
+
+    const name = cleanText(cols[3]);
+    const ciudad = cleanText(cols[5]);
+    const ruc = normalizeRuc(cleanText(cols[2]));
+
+    if (!name) {
+      skipped++;
+      continue;
+    }
+
+    if (!ciudad || ciudad === 'N/D') {
+      skipped++;
+      continue;
+    }
+
+    if (!ruc) {
+      log('Sin RUC → skip', name);
+      skipped++;
+      continue;
+    }
+
+    const payload = {
+      name,
+      address: ciudad,
+      city_id: cityMap[ciudad.toUpperCase()] || 1,
+      source: 'mic',
+      ruc
+    };
+
+    const result = await createBusiness(payload);
+
+    if (result === 'ok') created++;
+    if (result === 'duplicate') duplicates++;
+
+    // 🔥 control de carga
+    await new Promise(r => setTimeout(r, 50));
+  }
+
+  console.log('\n========= RESUMEN =========');
+  console.log('Creados:', created);
+  console.log('Duplicados:', duplicates);
+  console.log('Saltados:', skipped);
+  console.log('===========================');
+}
+
+run();

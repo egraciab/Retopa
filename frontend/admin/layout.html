@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>RETOPA Admin</title>
+</head>
+<body style="margin:0; display:flex; font-family:sans-serif;">
+  <div style="width:220px; background:#2f3542; color:white; height:100vh; padding:20px;">
+    <h2>RETOPA</h2>
+    <p><a href="dashboard.html" style="color:white;">Dashboard</a></p>
+    <p><a href="businesses.html" style="color:white;">Negocios</a></p>
+    <p><a href="claims.html" style="color:white;">Claims</a></p>
+    <hr>
+    <button onclick="logout()">Salir</button>
+  </div>
+  <div style="flex:1; padding:20px;">
+    <h2>Bienvenido al panel</h2>
+  </div>
+<script>
+function logout() {
+  localStorage.removeItem('retopa_token');
+  window.location.href = 'login.html';
+}
+</script>
+</body>
+</html>

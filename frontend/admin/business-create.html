@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Nuevo negocio</title>
+  <style>
+    body { font-family: Arial; max-width: 600px; margin: 20px auto; }
+    input, button { width: 100%; padding: 10px; margin: 8px 0; }
+  </style>
+</head>
+<body>
+
+<a href="/admin/businesses.html">← Volver</a>
+<h1>Nuevo negocio</h1>
+
+<form id="form">
+  <input id="name" placeholder="Nombre" required />
+  <input id="address" placeholder="Dirección" />
+  <input id="phone" placeholder="Teléfono" />
+  <input id="email" placeholder="Email" />
+  <input id="website" placeholder="Website" />
+
+  <button type="submit">Crear</button>
+</form>
+
+<script src="/admin/js/config.js"></script>
+<script src="/admin/js/auth.js"></script>
+
+<script>
+document.getElementById('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const payload = {
+    name: document.getElementById('name').value,
+    address: document.getElementById('address').value,
+    phone: document.getElementById('phone').value,
+    email: document.getElementById('email').value,
+    website: document.getElementById('website').value
+  };
+
+  const res = await fetch(`${window.RETOPA_API_BASE}/admin/businesses`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders()
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (res.ok) {
+    window.location.href = '/admin/businesses.html';
+  } else {
+    alert('Error creando negocio');
+  }
+});
+</script>
+
+</body>
+</html>

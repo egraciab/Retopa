@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>RETOPA Admin Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 420px; margin: 60px auto; padding: 20px; }
+    input, button { width: 100%; padding: 10px; margin: 8px 0; }
+    .error { color: #b00020; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>RETOPA Admin</h1>
+  <p>Iniciar sesión</p>
+
+  <form id="loginForm">
+    <input type="email" id="email" placeholder="Email" required />
+    <input type="password" id="password" placeholder="Contraseña" required />
+    <button type="submit">Ingresar</button>
+  </form>
+
+  <div id="error" class="error"></div>
+
+  <script src="/admin/js/config.js"></script>
+  <script src="/admin/js/auth.js"></script>
+  <script>
+    const form = document.getElementById('loginForm');
+    const errorDiv = document.getElementById('error');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorDiv.textContent = '';
+
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      const res = await fetch(`${window.RETOPA_API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        errorDiv.textContent = json.message || 'Login inválido';
+        return;
+      }
+
+      setToken(json.data.token);
+      window.location.href = '/admin/businesses.html';
+    });
+  </script>
+</body>
+</html>

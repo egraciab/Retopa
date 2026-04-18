@@ -1,0 +1,51 @@
+const express = require("express");
+const app = express();
+const port = process.env.PORT || 3001;
+
+app.get("/", (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Retopa</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          margin: 0;
+          background: #0b1020;
+          color: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 100vh;
+        }
+        .box {
+          max-width: 800px;
+          padding: 40px;
+          border-radius: 16px;
+          background: #121933;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        h1 { margin-top: 0; }
+        p { line-height: 1.6; }
+        .ok { color: #7CFFB2; }
+      </style>
+    </head>
+    <body>
+      <div class="box">
+        <h1>Retopa</h1>
+        <p class="ok">Frontend online</p>
+        <p>Directorio + motor de captación para Hepta Cloud.</p>
+        <p>Primer despliegue base operativo.</p>
+        <p>API health: <a href="/api/health" style="color:#7CFFB2;">/api/health</a></p>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
+app.listen(port, "0.0.0.0", () => {
+  console.log(`Frontend running on port ${port}`);
+});

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>RETOPA Admin - Editar negocio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 700px; margin: 20px auto; padding: 20px; }
+    input, select, button { width: 100%; padding: 10px; margin: 8px 0; }
+    label { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <a href="/admin/businesses.html">← Volver</a>
+  <h1>Editar negocio</h1>
+
+  <form id="form">
+    <label>Nombre</label>
+    <input id="name" />
+
+    <label>Dirección</label>
+    <input id="address" />
+
+    <label>Teléfono</label>
+    <input id="phone" />
+
+    <label>Email</label>
+    <input id="email" />
+
+    <label>Website</label>
+    <input id="website" />
+
+    <label>Source</label>
+    <input id="source" />
+
+    <label>Claimed</label>
+    <select id="claimed">
+      <option value="true">true</option>
+      <option value="false">false</option>
+    </select>
+
+    <label>Activo</label>
+    <select id="is_active">
+      <option value="true">true</option>
+      <option value="false">false</option>
+    </select>
+
+    <button type="submit">Guardar</button>
+  </form>
+
+  <script src="/admin/js/config.js"></script>
+  <script src="/admin/js/auth.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+
+    async function loadBusiness() {
+      const res = await fetch(`${window.RETOPA_API_BASE}/admin/businesses/${id}`, {
+        headers: {
+          ...authHeaders()
+        }
+      });
+
+      const json = await res.json();
+      const b = json.data;
+
+      document.getElementById('name').value = b.name || '';
+      document.getElementById('address').value = b.address || '';
+      document.getElementById('phone').value = b.phone || '';
+      document.getElementById('email').value = b.email || '';
+      document.getElementById('website').value = b.website || '';
+      document.getElementById('source').value = b.source || '';
+      document.getElementById('claimed').value = String(b.claimed);
+      document.getElementById('is_active').value = String(b.is_active);
+    }
+
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const payload = {
+        name: document.getElementById('name').value.trim(),
+        address: document.getElementById('address').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        website: document.getElementById('website').value.trim(),
+        source: document.getElementById('source').value.trim(),
+        claimed: document.getElementById('claimed').value === 'true',
+        is_active: document.getElementById('is_active').value === 'true'
+      };
+
+      const res = await fetch(`${window.RETOPA_API_BASE}/admin/businesses/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders()
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        alert('Guardado correctamente');
+        window.location.href = '/admin/businesses.html';
+      } else {
+        alert('Error al guardar');
+      }
+    });
+
+    async function init() {
+      const user = await requireSession();
+      if (!user) return;
+      await loadBusiness();
+    }
+
+    init();
+  </script>
+</body>
+</html>

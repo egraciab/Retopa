@@ -1,0 +1,103 @@
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const pool = require('../db');
+
+async function login(req, res) {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required'
+      });
+    }
+
+    const result = await pool.query(
+      `
+      SELECT id, full_name, email, password_hash, role, is_active
+      FROM admin_users
+      WHERE email = $1
+      LIMIT 1
+      `,
+      [email]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+
+    const user = result.rows[0];
+
+    if (!user.is_active) {
+      return res.status(403).json({
+        success: false,
+        message: 'User inactive'
+      });
+    }
+
+    const ok = bcrypt.compareSync(password, user.password_hash);
+
+    if (!ok) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        full_name: user.full_name
+      },
+      process.env.JWT_SECRET || 'retopa_dev_secret',
+      { expiresIn: '8h' }
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        token,
+        user: {
+          id: user.id,
+          full_name: user.full_name,
+          email: user.email,
+          role: user.role
+        }
+      }
+    });
+  } catch (err) {
+    console.error('POST /api/auth/login error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Error during login'
+    });
+  }
+}
+
+async function me(req, res) {
+  try {
+    return res.json({
+      success: true,
+      data: {
+        id: req.user.sub,
+        full_name: req.user.full_name,
+        email: req.user.email,
+        role: req.user.role
+      }
+    });
+  } catch (err) {
+    console.error('GET /api/auth/me error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Error fetching profile'
+    });
+  }
+}
+
+module.exports = { login, me };

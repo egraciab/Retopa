@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Negocios</title>
+</head>
+<body>
+<h1>Negocios</h1>
+<select id="categoryFilter">
+  <option value="">Todas</option>
+  <option value="1">Restaurantes</option>
+  <option value="2">Farmacias</option>
+</select>
+<table border="1" width="100%">
+<thead>
+<tr>
+<th>ID</th>
+<th>Nombre</th>
+<th>RUC</th>
+<th>Ciudad</th>
+<th>Categoría</th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
+<script>
+const params = new URLSearchParams(window.location.search);
+const categoryId = params.get('category_id');
+if(categoryId){
+  document.getElementById('categoryFilter').value = categoryId;
+}
+</script>
+</body>
+</html>

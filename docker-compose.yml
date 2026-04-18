@@ -1,0 +1,94 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: retopa-db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - retopa_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - retopa_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: retopa-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - retopa_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - retopa_net
+
+  backend:
+    build: ./backend
+    container_name: retopa-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: ${BACKEND_PORT}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - retopa_net
+
+  frontend:
+    build: ./frontend
+    container_name: retopa-frontend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: ${FRONTEND_PORT}
+      NEXT_PUBLIC_API_URL: /api
+    depends_on:
+      - backend
+    networks:
+      - retopa_net
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: retopa-nginx
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - retopa_net
+
+volumes:
+  retopa_postgres_data:
+  retopa_redis_data:
+
+networks:
+  retopa_net:
+    driver: bridge

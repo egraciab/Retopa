@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dashboard</title>
+  <style>
+    .card {
+      padding:20px;
+      border-radius:8px;
+      background:#f1f2f6;
+      margin:10px;
+      cursor:pointer;
+    }
+    .card:hover { background:#dfe4ea; }
+  </style>
+</head>
+<body>
+<h1>Dashboard</h1>
+<div class="card" onclick="goToCategory(4)">Supermercados</div>
+<div class="card" onclick="goToCategory(3)">Ferreterías</div>
+<script>
+function goToCategory(id){
+  window.location.href = 'businesses.html?category_id=' + id;
+}
+</script>
+</body>
+</html>
