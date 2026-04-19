@@ -1,40 +1,26 @@
 function getToken() {
-  return localStorage.getItem('retopa_token');
+  return localStorage.getItem('token');
 }
 
-function setToken(token) {
-  localStorage.setItem('retopa_token', token);
-}
-
-function clearToken() {
-  localStorage.removeItem('retopa_token');
-}
-
-function authHeaders() {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-async function requireSession() {
+async function authFetch(url, options = {}) {
   const token = getToken();
 
-  if (!token) {
-    window.location.href = '/admin/login.html';
-    return null;
-  }
+  const headers = {
+    ...(options.headers || {}),
+    'Authorization': `Bearer ${token}`
+  };
 
-  const res = await fetch(`${window.RETOPA_API_BASE}/auth/me`, {
-    headers: {
-      ...authHeaders()
-    }
+  const res = await fetch(url, {
+    ...options,
+    headers
   });
 
-  if (!res.ok) {
-    clearToken();
+  if (res.status === 401) {
+    console.warn('Unauthorized, redirecting to login');
+    localStorage.removeItem('token');
     window.location.href = '/admin/login.html';
     return null;
   }
 
-  const json = await res.json();
-  return json.data;
+  return res;
 }

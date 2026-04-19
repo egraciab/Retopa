@@ -4,6 +4,10 @@ const pool = require("./src/db");
 
 const port = process.env.PORT || 3000;
 
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET missing. Refusing to start.");
+}
+
 const redisClient = redis.createClient({
   socket: {
     host: process.env.REDIS_HOST,
@@ -23,7 +27,6 @@ async function start() {
     console.error("Redis connect failed:", err.message);
   }
 
-  // Health endpoint
   app.get("/health", async (req, res) => {
     try {
       const db = await pool.query("SELECT NOW() AS now");

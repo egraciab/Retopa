@@ -1,93 +1,40 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>RETOPA Admin</title>
-
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-
-<style>
-body {
-  background: linear-gradient(135deg, #1d3557, #457b9d);
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.login-box {
-  background: white;
-  padding: 30px;
-  border-radius: 12px;
-  width: 350px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-}
-
-.login-box h3 {
-  text-align: center;
-  margin-bottom: 20px;
-}
-</style>
+  <meta charset="UTF-8">
+  <title>Retopa Admin Login</title>
 </head>
-
 <body>
+  <h2>RETOPA Admin</h2>
 
-<div class="login-box">
-  <h3>RETOPA Admin</h3>
+  <input id="email" placeholder="Email" />
+  <input id="password" type="password" placeholder="Password" />
+  <button onclick="login()">Ingresar</button>
 
-  <form id="loginForm">
-    <input class="form-control mb-3" id="email" placeholder="Email" />
-    <input class="form-control mb-3" id="password" type="password" placeholder="Password" />
+  <script>
+    async function login() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
 
-    <button class="btn btn-primary w-100">Ingresar</button>
-  </form>
-</div>
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
 
-<script src="/admin/js/config.js"></script>
-<script src="/admin/js/auth.js"></script>
+      const data = await res.json();
 
-<script>
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
+      if (!data.success) {
+        alert(data.message);
+        return;
+      }
 
-  try {
+      // 🔐 guardar token
+      localStorage.setItem('token', data.data.token);
 
-    const res = await fetch(`${window.RETOPA_API_BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: document.getElementById('email').value,
-        password: document.getElementById('password').value
-      })
-    });
-
-    const json = await res.json();
-
-    console.log("LOGIN RESPONSE:", json);
-
-    if (!json.success) {
-      alert('Credenciales inválidas');
-      return;
+      // 🚀 ir al panel
+      window.location.href = '/admin/dashboard.html';
     }
-
-    // 🔥 manejar ambos formatos posibles
-    const token = json.token || json.data?.token;
-
-    if (!token) {
-      alert('No vino token');
-      return;
-    }
-
-    // ✅ GUARDAR DIRECTO (SIN auth.js)
-    localStorage.setItem('retopa_token', token);
-
-    window.location.href = '/admin/layout.html';
-
-  } catch (err) {
-    console.error(err);
-    alert('Error en login');
-  }
-});
-</script>
+  </script>
 </body>
 </html>

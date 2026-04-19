@@ -2,32 +2,43 @@
 <html>
 <head>
   <title>Negocios</title>
+  <script src="/admin/js/auth.js"></script>
 </head>
 <body>
-<h1>Negocios</h1>
-<select id="categoryFilter">
-  <option value="">Todas</option>
-  <option value="1">Restaurantes</option>
-  <option value="2">Farmacias</option>
-</select>
-<table border="1" width="100%">
-<thead>
-<tr>
-<th>ID</th>
-<th>Nombre</th>
-<th>RUC</th>
-<th>Ciudad</th>
-<th>Categoría</th>
-</tr>
-</thead>
-<tbody id="tbody"></tbody>
-</table>
-<script>
-const params = new URLSearchParams(window.location.search);
-const categoryId = params.get('category_id');
-if(categoryId){
-  document.getElementById('categoryFilter').value = categoryId;
-}
-</script>
+  <h1>Negocios</h1>
+
+  <table border="1">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Nombre</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <script>
+    async function loadBusinesses() {
+      const res = await authFetch('/api/admin/businesses');
+
+      if (!res) return;
+
+      const data = await res.json();
+
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+
+      data.data.forEach(b => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${b.id}</td>
+          <td>${b.name}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    loadBusinesses();
+  </script>
 </body>
 </html>

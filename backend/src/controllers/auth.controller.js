@@ -2,6 +2,12 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../db');
 
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is required');
+}
+
 async function login(req, res) {
   try {
     const { email, password } = req.body;
@@ -55,7 +61,7 @@ async function login(req, res) {
         role: user.role,
         full_name: user.full_name
       },
-      process.env.JWT_SECRET || 'retopa_dev_secret',
+      JWT_SECRET,
       { expiresIn: '8h' }
     );
 
