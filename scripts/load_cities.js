@@ -3,26 +3,29 @@ const path = require('path');
 const { Pool } = require('pg');
 
 const pool = new Pool({
-  host: 'localhost',
-  port: 5432,
-  database: 'retopa',
-  user: 'retopa',
-  password: 'RetopaDB_2026!'
+  host: process.env.DB_HOST || 'postgres',
+  port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME || 'retopa',
+  user: process.env.DB_USER || 'retopa',
+  password: process.env.DB_PASSWORD || 'RetopaDB_2026!'
 });
 
-function normalize(text) {
-  return text
+function slugify(text) {
+  return (text || '')
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // quita acentos
-    .trim();
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
 }
 
 async function run() {
-  const file = fs.readFileSync(path.join(__dirname, 'mic_full.csv'), 'utf-8');
+  const file = fs.readFileSync(path.join('/app/', 'mic_full.csv'), 'utf-8');
   const lines = file.split('\n');
-
-  lines.shift(); // header
+  lines.shift();
 
   const cities = new Set();
 
@@ -32,17 +35,16 @@ async function run() {
     const cols = line.split(';');
     let ciudad = cols[5];
 
-    if (!ciudad || ciudad === 'N/D') continue;
+    if (!ciudad || ciudad.trim() === 'N/D') continue;
 
     ciudad = ciudad.trim().replace(/"/g, '');
-
     cities.add(ciudad);
   }
 
   console.log('Ciudades detectadas:', cities.size);
 
   for (const city of cities) {
-    const slug = normalize(city).replace(/\s+/g, '-');
+    const slug = slugify(city);
 
     await pool.query(
       `
@@ -53,11 +55,14 @@ async function run() {
       [city, slug]
     );
 
-    console.log('✔ Ciudad:', city);
+    console.log('OK Ciudad:', city);
   }
 
-  console.log('\n🔥 Ciudades cargadas correctamente');
-  process.exit();
+  await pool.end();
+  console.log('\nCiudades cargadas correctamente');
 }
 
-run();
+run().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
