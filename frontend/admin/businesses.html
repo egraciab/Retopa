@@ -1,44 +1,19 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Negocios</title>
-  <script src="/admin/js/auth.js"></script>
-</head>
-<body>
-  <h1>Negocios</h1>
-
-  <table border="1">
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Nombre</th>
-      </tr>
-    </thead>
-    <tbody id="tbody"></tbody>
-  </table>
-
-  <script>
-    async function loadBusinesses() {
-      const res = await authFetch('/api/admin/businesses');
-
-      if (!res) return;
-
-      const data = await res.json();
-
-      const tbody = document.getElementById('tbody');
-      tbody.innerHTML = '';
-
-      data.data.forEach(b => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${b.id}</td>
-          <td>${b.name}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    loadBusinesses();
-  </script>
-</body>
-</html>
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Listado de negocios</span>
+    <a href="/admin/business-create.html" class="btn btn-sm btn-primary">Nuevo negocio</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-striped mb-0">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nombre</th>
+          <th>Ciudad</th>
+          <th>Categoría</th>
+        </tr>
+      </thead>
+      <tbody id="businesses-tbody"></tbody>
+    </table>
+  </div>
+</div>
