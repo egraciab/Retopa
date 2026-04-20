@@ -1,27 +1,15 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Dashboard</title>
-  <script src="/admin/js/auth.js"></script>
-</head>
-<body>
-  <h1>Dashboard</h1>
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h6 class="text-muted">Negocios cargados (página actual)</h6>
+        <h2 id="dashboard-total">0</h2>
+      </div>
+    </div>
+  </div>
+</div>
 
-  <div id="content"></div>
-
-  <script>
-    async function load() {
-      const res = await authFetch('/api/admin/businesses');
-
-      if (!res) return;
-
-      const data = await res.json();
-
-      document.getElementById('content').innerHTML =
-        JSON.stringify(data, null, 2);
-    }
-
-    load();
-  </script>
-</body>
-</html>
+<div class="card mt-3 shadow-sm">
+  <div class="card-header">Últimos negocios</div>
+  <ul class="list-group list-group-flush" id="dashboard-businesses"></ul>
+</div>
