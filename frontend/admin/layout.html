@@ -73,35 +73,63 @@
     }
 
     async function renderDashboard() {
-      const res = await authFetch('/api/admin/businesses/stats');
-      if (!res) return;
+      let stats = null;
 
-      const data = await res.json();
-      const stats = data.data || {};
+      const statsRes = await authFetch('/api/admin/businesses/stats');
+      if (statsRes && statsRes.ok) {
+        const statsData = await statsRes.json();
+        stats = statsData.data || {};
+      }
+
+      if (!stats) {
+        const fallbackRes = await authFetch('/api/admin/businesses');
+        if (!fallbackRes || !fallbackRes.ok) return;
+
+        const fallbackData = await fallbackRes.json();
+        const items = fallbackData.data || [];
+        stats = {
+          total_businesses: fallbackData.meta?.total || items.length,
+          recent_businesses: items.slice(0, 5)
+        };
+      }
+
       const total = document.getElementById('dashboard-total');
       total.textContent = stats.total_businesses || 0;
 
       const categoriesEl = document.getElementById('dashboard-top-categories');
-      categoriesEl.innerHTML = (stats.top_categories || [])
-        .map((item) => `<li class="list-group-item d-flex justify-content-between"><span>${item.name}</span><strong>${item.total}</strong></li>`)
-        .join('') || '<li class="list-group-item text-muted">Sin datos</li>';
+      if (categoriesEl) {
+        categoriesEl.innerHTML = (stats.top_categories || [])
+          .map((item) => `<li class="list-group-item d-flex justify-content-between"><span>${item.name}</span><strong>${item.total}</strong></li>`)
+          .join('') || '<li class="list-group-item text-muted">Sin datos</li>';
+      }
 
       const citiesEl = document.getElementById('dashboard-top-cities');
-      citiesEl.innerHTML = (stats.top_cities || [])
-        .map((item) => `<li class="list-group-item d-flex justify-content-between"><span>${item.name}</span><strong>${item.total}</strong></li>`)
-        .join('') || '<li class="list-group-item text-muted">Sin datos</li>';
+      if (citiesEl) {
+        citiesEl.innerHTML = (stats.top_cities || [])
+          .map((item) => `<li class="list-group-item d-flex justify-content-between"><span>${item.name}</span><strong>${item.total}</strong></li>`)
+          .join('') || '<li class="list-group-item text-muted">Sin datos</li>';
+      }
 
       const recentEl = document.getElementById('dashboard-recent-businesses');
-      recentEl.innerHTML = (stats.recent_businesses || [])
-        .map((b) => `
-          <tr>
-            <td>${b.id}</td>
-            <td>${b.name}</td>
-            <td>${b.category || '-'}</td>
-            <td>${b.city || '-'}</td>
-          </tr>
-        `)
-        .join('') || '<tr><td colspan="4" class="text-muted">Sin datos</td></tr>';
+      if (recentEl) {
+        recentEl.innerHTML = (stats.recent_businesses || [])
+          .map((b) => `
+            <tr>
+              <td>${b.id}</td>
+              <td>${b.name}</td>
+              <td>${b.category || '-'}</td>
+              <td>${b.city || '-'}</td>
+            </tr>
+          `)
+          .join('') || '<tr><td colspan="4" class="text-muted">Sin datos</td></tr>';
+      }
+
+      const legacyListEl = document.getElementById('dashboard-businesses');
+      if (legacyListEl) {
+        legacyListEl.innerHTML = (stats.recent_businesses || [])
+          .map((b) => `<li class="list-group-item">${b.name}</li>`)
+          .join('') || '<li class="list-group-item text-muted">Sin datos</li>';
+      }
     }
 
     async function renderBusinesses() {
