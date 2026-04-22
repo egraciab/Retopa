@@ -73,17 +73,69 @@
     }
 
     async function renderDashboard() {
-      const res = await authFetch('/api/admin/businesses');
-      if (!res) return;
+async function renderDashboard() {
+  let stats = null;
 
-      const data = await res.json();
-      const items = data.data || [];
+  const statsRes = await authFetch('/api/admin/businesses/stats');
+  if (statsRes && statsRes.ok) {
+    const statsData = await statsRes.json();
+    stats = statsData.data || {};
+  }
 
-      const list = document.getElementById('dashboard-businesses');
-      const total = document.getElementById('dashboard-total');
-      total.textContent = items.length;
-      list.innerHTML = items.slice(0, 8).map((b) => `<li class="list-group-item">${b.name}</li>`).join('');
-    }
+  if (!stats) {
+    const fallbackRes = await authFetch('/api/admin/businesses');
+    if (!fallbackRes || !fallbackRes.ok) return;
+
+    const fallbackData = await fallbackRes.json();
+    const items = fallbackData.data || [];
+    stats = {
+      total_businesses: fallbackData.meta?.total || items.length,
+      recent_businesses: items.slice(0, 5)
+    };
+  }
+
+  // TOTAL
+  const total = document.getElementById('dashboard-total');
+  if (total) total.textContent = stats.total_businesses || 0;
+
+  // CATEGORÍAS
+  const categoriesEl = document.getElementById('dashboard-top-categories');
+  if (categoriesEl) {
+    categoriesEl.innerHTML = (stats.top_categories || [])
+      .map((item) => `
+        <li class="list-group-item d-flex justify-content-between">
+          <span>${item.name}</span>
+          <strong>${item.total}</strong>
+        </li>
+      `).join('') || '<li class="list-group-item text-muted">Sin datos</li>';
+  }
+
+  // CIUDADES
+  const citiesEl = document.getElementById('dashboard-top-cities');
+  if (citiesEl) {
+    citiesEl.innerHTML = (stats.top_cities || [])
+      .map((item) => `
+        <li class="list-group-item d-flex justify-content-between">
+          <span>${item.name}</span>
+          <strong>${item.total}</strong>
+        </li>
+      `).join('') || '<li class="list-group-item text-muted">Sin datos</li>';
+  }
+
+  // RECIENTES
+  const recentEl = document.getElementById('dashboard-recent-businesses');
+  if (recentEl) {
+    recentEl.innerHTML = (stats.recent_businesses || [])
+      .map((b) => `
+        <tr>
+          <td>${b.id}</td>
+          <td>${b.name}</td>
+          <td>${b.category || '-'}</td>
+          <td>${b.city || '-'}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="4" class="text-muted">Sin datos</td></tr>';
+  }
+}
 
     async function renderBusinesses() {
       const res = await authFetch('/api/admin/businesses');

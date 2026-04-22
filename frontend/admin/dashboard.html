@@ -2,14 +2,41 @@
   <div class="col-md-4">
     <div class="card shadow-sm">
       <div class="card-body">
-        <h6 class="text-muted">Negocios cargados (página actual)</h6>
-        <h2 id="dashboard-total">0</h2>
+        <h6 class="text-muted mb-1">Total negocios (global)</h6>
+        <h2 id="dashboard-total" class="mb-0">0</h2>
       </div>
     </div>
   </div>
 </div>
 
+<div class="row g-3 mt-1">
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header">Top categorías</div>
+      <ul class="list-group list-group-flush" id="dashboard-top-categories"></ul>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header">Top ciudades</div>
+      <ul class="list-group list-group-flush" id="dashboard-top-cities"></ul>
+    </div>
+  </div>
+</div>
+
 <div class="card mt-3 shadow-sm">
-  <div class="card-header">Últimos negocios</div>
-  <ul class="list-group list-group-flush" id="dashboard-businesses"></ul>
+  <div class="card-header">5 negocios más recientes</div>
+  <div class="table-responsive">
+    <table class="table mb-0">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nombre</th>
+          <th>Categoría</th>
+          <th>Ciudad</th>
+        </tr>
+      </thead>
+      <tbody id="dashboard-recent-businesses"></tbody>
+    </table>
+  </div>
 </div>
