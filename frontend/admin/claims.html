@@ -1,27 +1,6 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Claims</title>
-  <script src="/admin/js/auth.js"></script>
-</head>
-<body>
-  <h1>Claims</h1>
-
-  <div id="claims"></div>
-
-  <script>
-    async function loadClaims() {
-      const res = await authFetch('/api/admin/claims');
-
-      if (!res) return;
-
-      const data = await res.json();
-
-      document.getElementById('claims').innerHTML =
-        JSON.stringify(data, null, 2);
-    }
-
-    loadClaims();
-  </script>
-</body>
-</html>
+<div class="card shadow-sm">
+  <div class="card-header">Claims</div>
+  <div class="card-body">
+    <pre id="claims-json" class="mb-0" style="max-height: 500px; overflow: auto;"></pre>
+  </div>
+</div>

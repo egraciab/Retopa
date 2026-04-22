@@ -1,25 +1,218 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RETOPA Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background:#f4f6f9; font-family: Arial, sans-serif; }
+    .sidebar {
+      width: 230px;
+      min-height: 100vh;
+      position: fixed;
+      left: 0;
+      top: 0;
+      background: #343a40;
+      color: #fff;
+      padding: 16px;
+    }
+    .sidebar .brand { font-size: 22px; font-weight: 700; margin-bottom: 16px; }
+    .sidebar .nav-link {
+      color: #ced4da;
+      padding: 10px 12px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      display: block;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .sidebar .nav-link:hover,
+    .sidebar .nav-link.active {
+      color: #fff;
+      background: #495057;
+    }
+    .main {
+      margin-left: 230px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      background: #fff;
+      border-bottom: 1px solid #dee2e6;
+      padding: 12px 20px;
+      font-weight: 600;
+    }
+    #content {
+      padding: 20px;
+    }
+  </style>
 </head>
-<body style="margin:0; display:flex; font-family:sans-serif;">
-  <div style="width:220px; background:#2f3542; color:white; height:100vh; padding:20px;">
-    <h2>RETOPA</h2>
-    <p><a href="dashboard.html" style="color:white;">Dashboard</a></p>
-    <p><a href="businesses.html" style="color:white;">Negocios</a></p>
-    <p><a href="claims.html" style="color:white;">Claims</a></p>
+<body>
+  <aside class="sidebar">
+    <div class="brand">RETOPA</div>
+    <a class="nav-link active" data-page="dashboard" href="/admin/layout.html#dashboard" onclick="return handleNav('dashboard', event, this)">Dashboard</a>
+    <a class="nav-link" data-page="businesses" href="/admin/layout.html#businesses" onclick="return handleNav('businesses', event, this)">Negocios</a>
+    <a class="nav-link" data-page="claims" href="/admin/layout.html#claims" onclick="return handleNav('claims', event, this)">Claims</a>
     <hr>
-    <button onclick="logout()">Salir</button>
-  </div>
-  <div style="flex:1; padding:20px;">
-    <h2>Bienvenido al panel</h2>
-  </div>
-<script>
-function logout() {
-  localStorage.removeItem('retopa_token');
-  window.location.href = 'login.html';
-}
-</script>
+    <button class="btn btn-sm btn-danger w-100" onclick="logout()">Salir</button>
+  </aside>
+
+  <main class="main">
+    <div class="topbar" id="page-title">Dashboard</div>
+    <div id="content"></div>
+  </main>
+
+  <script src="/admin/js/auth.js"></script>
+  <script>
+    function setActiveLink(page) {
+      document.querySelectorAll('.sidebar .nav-link').forEach((link) => {
+        link.classList.toggle('active', link.dataset.page === page);
+      });
+    }
+
+    async function renderDashboard() {
+      let stats = null;
+
+      const statsRes = await authFetch('/api/admin/businesses/stats');
+      if (statsRes && statsRes.ok) {
+        const statsData = await statsRes.json();
+        stats = statsData.data || {};
+      }
+
+      if (!stats) {
+        const fallbackRes = await authFetch('/api/admin/businesses');
+        if (!fallbackRes || !fallbackRes.ok) return;
+
+        const fallbackData = await fallbackRes.json();
+        const items = fallbackData.data || [];
+        stats = {
+          total_businesses: fallbackData.meta?.total || items.length,
+          recent_businesses: items.slice(0, 5)
+        };
+      }
+
+      const total = document.getElementById('dashboard-total');
+      total.textContent = stats.total_businesses || 0;
+
+      const categoriesEl = document.getElementById('dashboard-top-categories');
+      if (categoriesEl) {
+        categoriesEl.innerHTML = (stats.top_categories || [])
+          .map((item) => `<li class="list-group-item d-flex justify-content-between"><span>${item.name}</span><strong>${item.total}</strong></li>`)
+          .join('') || '<li class="list-group-item text-muted">Sin datos</li>';
+      }
+
+      const citiesEl = document.getElementById('dashboard-top-cities');
+      if (citiesEl) {
+        citiesEl.innerHTML = (stats.top_cities || [])
+          .map((item) => `<li class="list-group-item d-flex justify-content-between"><span>${item.name}</span><strong>${item.total}</strong></li>`)
+          .join('') || '<li class="list-group-item text-muted">Sin datos</li>';
+      }
+
+      const recentEl = document.getElementById('dashboard-recent-businesses');
+      if (recentEl) {
+        recentEl.innerHTML = (stats.recent_businesses || [])
+          .map((b) => `
+            <tr>
+              <td>${b.id}</td>
+              <td>${b.name}</td>
+              <td>${b.category || '-'}</td>
+              <td>${b.city || '-'}</td>
+            </tr>
+          `)
+          .join('') || '<tr><td colspan="4" class="text-muted">Sin datos</td></tr>';
+      }
+
+      const legacyListEl = document.getElementById('dashboard-businesses');
+      if (legacyListEl) {
+        legacyListEl.innerHTML = (stats.recent_businesses || [])
+          .map((b) => `<li class="list-group-item">${b.name}</li>`)
+          .join('') || '<li class="list-group-item text-muted">Sin datos</li>';
+      }
+    }
+
+    async function renderBusinesses() {
+      const res = await authFetch('/api/admin/businesses');
+      if (!res) return;
+
+      const data = await res.json();
+      const tbody = document.getElementById('businesses-tbody');
+      tbody.innerHTML = '';
+
+      (data.data || []).forEach((b) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${b.id}</td>
+          <td>${b.name}</td>
+          <td>${b.city || '-'}</td>
+          <td>${b.category || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function renderClaims() {
+      const res = await authFetch('/api/admin/claims');
+      if (!res) return;
+
+      const data = await res.json();
+      document.getElementById('claims-json').textContent = JSON.stringify(data, null, 2);
+    }
+
+    const pageRenderers = {
+      dashboard: renderDashboard,
+      businesses: renderBusinesses,
+      claims: renderClaims
+    };
+
+    function handleNav(page, event, linkEl) {
+      if (event) event.preventDefault();
+      loadPage(page, linkEl, true);
+      return false;
+    }
+
+    async function loadPage(page, linkEl, updateHash = false) {
+      const res = await fetch(`/admin/${page}.html`);
+      if (!res.ok) {
+        document.getElementById('content').innerHTML = '<div class="alert alert-danger">No se pudo cargar la página.</div>';
+        return;
+      }
+
+      const html = await res.text();
+      document.getElementById('content').innerHTML = html;
+      document.getElementById('page-title').textContent = page.charAt(0).toUpperCase() + page.slice(1);
+      setActiveLink(page);
+      if (linkEl) linkEl.blur();
+      if (updateHash && window.location.hash !== `#${page}`) {
+        window.location.hash = page;
+      }
+
+      const renderer = pageRenderers[page];
+      if (renderer) await renderer();
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      window.location.href = '/admin/login.html';
+    }
+
+    async function initLayout() {
+      const user = await requireSession();
+      if (!user) return;
+
+      const initialPage = (window.location.hash || '#dashboard').replace('#', '');
+      const safePage = pageRenderers[initialPage] ? initialPage : 'dashboard';
+      await loadPage(safePage);
+    }
+
+    window.addEventListener('hashchange', () => {
+      const page = (window.location.hash || '#dashboard').replace('#', '');
+      if (!pageRenderers[page]) return;
+      loadPage(page);
+    });
+
+    initLayout();
+  </script>
 </body>
 </html>
