@@ -66,6 +66,43 @@
 
   <script src="/admin/js/auth.js"></script>
   <script>
+    const numberFormatter = new Intl.NumberFormat('es-PY');
+    let businessesDebounce = null;
+    let businessesFiltersCache = null;
+
+    function formatNumber(value) {
+      return numberFormatter.format(Number(value || 0));
+    }
+
+    function parseHashRoute() {
+      const raw = (window.location.hash || '#dashboard').slice(1);
+      const [pageRaw, queryRaw = ''] = raw.split('?');
+      const page = pageRaw || 'dashboard';
+      const params = new URLSearchParams(queryRaw);
+      return { page, params };
+    }
+
+    function buildHash(page, params) {
+      const qs = params.toString();
+      return `#${page}${qs ? `?${qs}` : ''}`;
+    }
+
+    function updateRoute(page, nextParams = {}) {
+      const params = new URLSearchParams();
+      Object.entries(nextParams).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+          params.set(key, String(value));
+        }
+      });
+
+      const nextHash = buildHash(page, params);
+      if (window.location.hash !== nextHash) {
+        window.location.hash = nextHash;
+      } else {
+        loadFromRoute().catch((err) => console.error('Route reload error:', err));
+      }
+    }
+
     function setActiveLink(page) {
       document.querySelectorAll('.sidebar .nav-link').forEach((link) => {
         link.classList.toggle('active', link.dataset.page === page);
@@ -73,6 +110,9 @@
     }
 
     async function renderDashboard() {
+      const totalEl = document.getElementById('dashboard-total');
+      if (totalEl) totalEl.textContent = 'Cargando...';
+
       let stats = null;
 
       const statsRes = await authFetch('/api/admin/businesses/stats');
@@ -94,20 +134,20 @@
       }
 
       const total = document.getElementById('dashboard-total');
-      total.textContent = stats.total_businesses || 0;
+      total.textContent = formatNumber(stats.total_businesses || 0);
 
       const categoriesEl = document.getElementById('dashboard-top-categories');
       if (categoriesEl) {
         categoriesEl.innerHTML = (stats.top_categories || [])
-          .map((item) => `<li class="list-group-item d-flex justify-content-between"><span>${item.name}</span><strong>${item.total}</strong></li>`)
-          .join('') || '<li class="list-group-item text-muted">Sin datos</li>';
+          .map((item) => `<li class="list-group-item d-flex justify-content-between align-items-center"><span>${item.name}</span><strong>${formatNumber(item.total)}</strong></li>`)
+          .join('') || '<li class="list-group-item text-muted">No data</li>';
       }
 
       const citiesEl = document.getElementById('dashboard-top-cities');
       if (citiesEl) {
         citiesEl.innerHTML = (stats.top_cities || [])
-          .map((item) => `<li class="list-group-item d-flex justify-content-between"><span>${item.name}</span><strong>${item.total}</strong></li>`)
-          .join('') || '<li class="list-group-item text-muted">Sin datos</li>';
+          .map((item) => `<li class="list-group-item d-flex justify-content-between align-items-center"><span>${item.name}</span><strong>${formatNumber(item.total)}</strong></li>`)
+          .join('') || '<li class="list-group-item text-muted">No data</li>';
       }
 
       const recentEl = document.getElementById('dashboard-recent-businesses');
@@ -121,35 +161,176 @@
               <td>${b.city || '-'}</td>
             </tr>
           `)
-          .join('') || '<tr><td colspan="4" class="text-muted">Sin datos</td></tr>';
+          .join('') || '<tr><td colspan="4" class="text-muted">No data</td></tr>';
       }
 
       const legacyListEl = document.getElementById('dashboard-businesses');
       if (legacyListEl) {
         legacyListEl.innerHTML = (stats.recent_businesses || [])
           .map((b) => `<li class="list-group-item">${b.name}</li>`)
-          .join('') || '<li class="list-group-item text-muted">Sin datos</li>';
+          .join('') || '<li class="list-group-item text-muted">No data</li>';
       }
     }
 
-    async function renderBusinesses() {
-      const res = await authFetch('/api/admin/businesses');
+    async function loadBusinessesFilters() {
+      if (businessesFiltersCache) return businessesFiltersCache;
+
+      const [citiesRes, categoriesRes] = await Promise.all([
+        authFetch('/api/cities'),
+        authFetch('/api/admin/categories')
+      ]);
+
+      const [citiesData, categoriesData] = await Promise.all([
+        citiesRes?.ok ? citiesRes.json() : Promise.resolve({ data: [] }),
+        categoriesRes?.ok ? categoriesRes.json() : Promise.resolve({ data: [] })
+      ]);
+
+      businessesFiltersCache = {
+        cities: citiesData.data || [],
+        categories: categoriesData.data || []
+      };
+
+      return businessesFiltersCache;
+    }
+
+    function applySelectOptions(selectEl, items, currentValue, emptyLabel) {
+      if (!selectEl) return;
+      selectEl.innerHTML = `<option value="">${emptyLabel}</option>` + items
+        .map((item) => `<option value="${item.id}">${item.name}</option>`)
+        .join('');
+      selectEl.value = currentValue || '';
+    }
+
+    async function renderBusinesses(routeParams) {
+      const q = routeParams.get('q') || '';
+      const page = Math.max(parseInt(routeParams.get('page') || '1', 10), 1);
+      const cityId = routeParams.get('city_id') || '';
+      const categoryId = routeParams.get('category_id') || '';
+
+      const tbody = document.getElementById('businesses-tbody');
+      const searchEl = document.getElementById('business-search');
+      const cityEl = document.getElementById('business-city-filter');
+      const categoryEl = document.getElementById('business-category-filter');
+      const prevBtn = document.getElementById('businesses-prev');
+      const nextBtn = document.getElementById('businesses-next');
+      const pageInfo = document.getElementById('businesses-page-info');
+
+      if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Loading...</td></tr>';
+
+      const filters = await loadBusinessesFilters();
+      applySelectOptions(cityEl, filters.cities, cityId, 'Todas las ciudades');
+      applySelectOptions(categoryEl, filters.categories, categoryId, 'Todas las categorías');
+      if (searchEl) searchEl.value = q;
+
+      const query = new URLSearchParams();
+      query.set('page', String(page));
+      query.set('limit', '20');
+      if (q) query.set('q', q);
+      if (cityId) query.set('city_id', cityId);
+      if (categoryId) query.set('category_id', categoryId);
+
+      const res = await authFetch(`/api/admin/businesses?${query.toString()}`);
       if (!res) return;
+      if (!res.ok) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-danger">Error loading businesses</td></tr>';
+        return;
+      }
 
       const data = await res.json();
-      const tbody = document.getElementById('businesses-tbody');
-      tbody.innerHTML = '';
+      const rows = data.data || [];
+      const meta = data.meta || { page: 1, total_pages: 1, total: rows.length };
 
-      (data.data || []).forEach((b) => {
+      tbody.innerHTML = '';
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No data</td></tr>';
+      }
+
+      rows.forEach((b) => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${b.id}</td>
           <td>${b.name}</td>
           <td>${b.city || '-'}</td>
           <td>${b.category || '-'}</td>
+          <td class="text-end">
+            <a href="/admin/business-edit.html?id=${b.id}" class="btn btn-sm btn-outline-primary">Editar</a>
+          </td>
         `;
         tbody.appendChild(tr);
       });
+
+      if (pageInfo) {
+        pageInfo.textContent = `Página ${meta.page} de ${meta.total_pages} · ${formatNumber(meta.total)} resultados`;
+      }
+      if (prevBtn) prevBtn.disabled = meta.page <= 1;
+      if (nextBtn) nextBtn.disabled = meta.page >= meta.total_pages;
+
+      if (searchEl && !searchEl.dataset.bound) {
+        searchEl.dataset.bound = '1';
+        searchEl.addEventListener('input', () => {
+          clearTimeout(businessesDebounce);
+          businessesDebounce = setTimeout(() => {
+            updateRoute('businesses', {
+              page: 1,
+              q: searchEl.value.trim(),
+              city_id: cityEl?.value || '',
+              category_id: categoryEl?.value || ''
+            });
+          }, 300);
+        });
+      }
+
+      if (cityEl && !cityEl.dataset.bound) {
+        cityEl.dataset.bound = '1';
+        cityEl.addEventListener('change', () => {
+          updateRoute('businesses', {
+            page: 1,
+            q: searchEl?.value.trim() || '',
+            city_id: cityEl.value,
+            category_id: categoryEl?.value || ''
+          });
+        });
+      }
+
+      if (categoryEl && !categoryEl.dataset.bound) {
+        categoryEl.dataset.bound = '1';
+        categoryEl.addEventListener('change', () => {
+          updateRoute('businesses', {
+            page: 1,
+            q: searchEl?.value.trim() || '',
+            city_id: cityEl?.value || '',
+            category_id: categoryEl.value
+          });
+        });
+      }
+
+      if (prevBtn && !prevBtn.dataset.bound) {
+        prevBtn.dataset.bound = '1';
+        prevBtn.addEventListener('click', () => {
+          if (meta.page > 1) {
+            updateRoute('businesses', {
+              page: meta.page - 1,
+              q: searchEl?.value.trim() || '',
+              city_id: cityEl?.value || '',
+              category_id: categoryEl?.value || ''
+            });
+          }
+        });
+      }
+
+      if (nextBtn && !nextBtn.dataset.bound) {
+        nextBtn.dataset.bound = '1';
+        nextBtn.addEventListener('click', () => {
+          if (meta.page < meta.total_pages) {
+            updateRoute('businesses', {
+              page: meta.page + 1,
+              q: searchEl?.value.trim() || '',
+              city_id: cityEl?.value || '',
+              category_id: categoryEl?.value || ''
+            });
+          }
+        });
+      }
     }
 
     async function renderClaims() {
@@ -168,13 +349,12 @@
 
     function handleNav(page, event, linkEl) {
       if (event) event.preventDefault();
-      loadPage(page, linkEl, true).catch((err) => {
-        console.error('Navigation error:', err);
-      });
+      const defaults = page === 'businesses' ? { page: 1 } : {};
+      updateRoute(page, defaults);
       return false;
     }
 
-    async function loadPage(page, linkEl, updateHash = false) {
+    async function loadPage(page, linkEl, routeParams = new URLSearchParams()) {
       const res = await fetch(`/admin/${page}.html`);
       if (!res.ok) {
         document.getElementById('content').innerHTML = '<div class="alert alert-danger">No se pudo cargar la página.</div>';
@@ -186,12 +366,9 @@
       document.getElementById('page-title').textContent = page.charAt(0).toUpperCase() + page.slice(1);
       setActiveLink(page);
       if (linkEl) linkEl.blur();
-      if (updateHash && window.location.hash !== `#${page}`) {
-        window.location.hash = page;
-      }
 
       const renderer = pageRenderers[page];
-      if (renderer) await renderer();
+      if (renderer) await renderer(routeParams);
     }
 
     function logout() {
@@ -199,14 +376,17 @@
       window.location.href = '/admin/login.html';
     }
 
+    async function loadFromRoute() {
+      const { page, params } = parseHashRoute();
+      const safePage = pageRenderers[page] ? page : 'dashboard';
+      await loadPage(safePage, null, params);
+    }
+
     async function initLayout() {
       try {
         const user = await requireSession();
         if (!user) return;
-
-        const initialPage = (window.location.hash || '#dashboard').replace('#', '');
-        const safePage = pageRenderers[initialPage] ? initialPage : 'dashboard';
-        await loadPage(safePage);
+        await loadFromRoute();
       } catch (err) {
         console.error('Layout init error:', err);
         document.getElementById('content').innerHTML = '<div class="alert alert-danger">Error cargando panel. Vuelve a iniciar sesión.</div>';
@@ -214,9 +394,7 @@
     }
 
     window.addEventListener('hashchange', () => {
-      const page = (window.location.hash || '#dashboard').replace('#', '');
-      if (!pageRenderers[page]) return;
-      loadPage(page).catch((err) => {
+      loadFromRoute().catch((err) => {
         console.error('Hash navigation error:', err);
       });
     });
