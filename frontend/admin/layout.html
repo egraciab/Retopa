@@ -104,9 +104,15 @@
     }
 
     function setActiveLink(page) {
+      const selectedPage = page === 'business-edit' ? 'businesses' : page;
       document.querySelectorAll('.sidebar .nav-link').forEach((link) => {
-        link.classList.toggle('active', link.dataset.page === page);
+        link.classList.toggle('active', link.dataset.page === selectedPage);
       });
+    }
+
+    function getPageTitle(page) {
+      if (page === 'business-edit') return 'Editar negocio';
+      return page.charAt(0).toUpperCase() + page.slice(1);
     }
 
     async function renderDashboard() {
@@ -253,7 +259,7 @@
           <td>${b.city || '-'}</td>
           <td>${b.category || '-'}</td>
           <td class="text-end">
-            <a href="/admin/business-edit.html?id=${b.id}" class="btn btn-sm btn-outline-primary">Editar</a>
+            <a href="/admin/layout.html#business-edit?id=${b.id}" class="btn btn-sm btn-outline-primary">Editar</a>
           </td>
         `;
         tbody.appendChild(tr);
@@ -333,17 +339,149 @@
       }
     }
 
+    async function renderBusinessEdit(routeParams) {
+      const id = routeParams.get('id');
+      const feedbackEl = document.getElementById('business-edit-feedback');
+      const form = document.getElementById('business-edit-form');
+      const submitBtn = document.getElementById('business-edit-submit');
+
+      if (!id) {
+        feedbackEl.innerHTML = '<div class="alert alert-danger">ID inválido para edición.</div>';
+        if (form) form.classList.add('d-none');
+        return;
+      }
+
+      feedbackEl.innerHTML = '<div class="text-muted">Loading...</div>';
+
+      const [filters, businessRes] = await Promise.all([
+        loadBusinessesFilters(),
+        authFetch(`/api/admin/businesses/${id}`)
+      ]);
+
+      if (!businessRes || !businessRes.ok) {
+        feedbackEl.innerHTML = '<div class="alert alert-danger">No se pudo cargar el negocio.</div>';
+        if (form) form.classList.add('d-none');
+        return;
+      }
+
+      const businessJson = await businessRes.json();
+      const b = businessJson.data || {};
+
+      const nameEl = document.getElementById('edit-name');
+      const phoneEl = document.getElementById('edit-phone');
+      const websiteEl = document.getElementById('edit-website');
+      const cityEl = document.getElementById('edit-city-id');
+      const categoryEl = document.getElementById('edit-category-id');
+
+      applySelectOptions(cityEl, filters.cities, b.city_id, 'Sin ciudad');
+      applySelectOptions(categoryEl, filters.categories, b.category_id, 'Sin categoría');
+
+      nameEl.value = b.name || '';
+      phoneEl.value = b.phone || '';
+      websiteEl.value = b.website || '';
+      feedbackEl.innerHTML = '';
+
+      if (!form.dataset.bound) {
+        form.dataset.bound = '1';
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          submitBtn.disabled = true;
+          feedbackEl.innerHTML = '<div class="text-muted">Guardando...</div>';
+
+          const payload = {
+            name: nameEl.value.trim(),
+            phone: phoneEl.value.trim() || null,
+            website: websiteEl.value.trim() || null,
+            city_id: cityEl.value || null,
+            category_id: categoryEl.value || null
+          };
+
+          const updateRes = await authFetch(`/api/admin/businesses/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          submitBtn.disabled = false;
+          if (!updateRes || !updateRes.ok) {
+            feedbackEl.innerHTML = '<div class="alert alert-danger">Error al guardar cambios.</div>';
+            return;
+          }
+
+          feedbackEl.innerHTML = '<div class="alert alert-success">Cambios guardados correctamente.</div>';
+        });
+      }
+    }
+
+    function getClaimStatusBadge(status) {
+      const normalized = (status || '').toLowerCase();
+      if (normalized === 'approved') return '<span class="badge bg-success">approved</span>';
+      if (normalized === 'rejected') return '<span class="badge bg-danger">rejected</span>';
+      return '<span class="badge bg-warning text-dark">pending</span>';
+    }
+
+    async function updateClaimStatus(id, status) {
+      const res = await authFetch(`/api/admin/claims/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (!res || !res.ok) {
+        alert('No se pudo actualizar el claim.');
+        return;
+      }
+      await renderClaims();
+    }
+
     async function renderClaims() {
       const res = await authFetch('/api/admin/claims');
       if (!res) return;
+      const tbody = document.getElementById('claims-tbody');
+      if (!tbody) return;
+
+      if (!res.ok) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-danger">Error loading claims</td></tr>';
+        return;
+      }
 
       const data = await res.json();
-      document.getElementById('claims-json').textContent = JSON.stringify(data, null, 2);
+      const claims = data.data || [];
+
+      if (!claims.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-muted">No data</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = claims.map((c) => `
+        <tr>
+          <td>${c.id}</td>
+          <td>${c.business_name || '-'}</td>
+          <td>${c.full_name || '-'}</td>
+          <td>${c.email || '-'}</td>
+          <td>${getClaimStatusBadge(c.status)}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-success me-1 claim-action-btn"
+              data-id="${c.id}" data-status="approved"
+              ${c.status === 'approved' ? 'disabled' : ''}>Approve</button>
+            <button class="btn btn-sm btn-outline-danger claim-action-btn"
+              data-id="${c.id}" data-status="rejected"
+              ${c.status === 'rejected' ? 'disabled' : ''}>Reject</button>
+          </td>
+        </tr>
+      `).join('');
+
+      tbody.querySelectorAll('.claim-action-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          await updateClaimStatus(btn.dataset.id, btn.dataset.status);
+        });
+      });
     }
 
     const pageRenderers = {
       dashboard: renderDashboard,
       businesses: renderBusinesses,
+      'business-edit': renderBusinessEdit,
       claims: renderClaims
     };
 
@@ -355,7 +493,8 @@
     }
 
     async function loadPage(page, linkEl, routeParams = new URLSearchParams()) {
-      const res = await fetch(`/admin/${page}.html`);
+      const pageFile = page === 'business-edit' ? 'business-edit-view' : page;
+      const res = await fetch(`/admin/${pageFile}.html`);
       if (!res.ok) {
         document.getElementById('content').innerHTML = '<div class="alert alert-danger">No se pudo cargar la página.</div>';
         return;
@@ -363,7 +502,7 @@
 
       const html = await res.text();
       document.getElementById('content').innerHTML = html;
-      document.getElementById('page-title').textContent = page.charAt(0).toUpperCase() + page.slice(1);
+      document.getElementById('page-title').textContent = getPageTitle(page);
       setActiveLink(page);
       if (linkEl) linkEl.blur();
 

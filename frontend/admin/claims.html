@@ -1,6 +1,20 @@
 <div class="card shadow-sm">
   <div class="card-header">Claims</div>
-  <div class="card-body">
-    <pre id="claims-json" class="mb-0" style="max-height: 500px; overflow: auto;"></pre>
+  <div class="table-responsive">
+    <table class="table table-striped mb-0">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Negocio</th>
+          <th>Nombre</th>
+          <th>Email</th>
+          <th>Estado</th>
+          <th class="text-end">Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="claims-tbody">
+        <tr><td colspan="6" class="text-muted">Loading...</td></tr>
+      </tbody>
+    </table>
   </div>
 </div>
