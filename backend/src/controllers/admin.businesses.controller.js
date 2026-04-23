@@ -103,6 +103,69 @@ async function getAdminBusinesses(req, res) {
     res.status(500).json({ success: false });
   }
 }
+
+// =====================
+// DASHBOARD STATS
+// =====================
+async function getAdminDashboardStats(req, res) {
+  try {
+    const [totalBusinesses, topCategories, topCities, recentBusinesses] = await Promise.all([
+      pool.query(`
+        SELECT COUNT(*)::int AS total
+        FROM businesses b
+        WHERE b.is_active = true
+      `),
+      pool.query(`
+        SELECT
+          COALESCE(cat.name, 'Sin categoría') AS name,
+          COUNT(*)::int AS total
+        FROM businesses b
+        LEFT JOIN categories cat ON cat.id = b.category_id
+        WHERE b.is_active = true
+        GROUP BY cat.name
+        ORDER BY total DESC, name ASC
+        LIMIT 5
+      `),
+      pool.query(`
+        SELECT
+          COALESCE(c.name, 'Sin ciudad') AS name,
+          COUNT(*)::int AS total
+        FROM businesses b
+        LEFT JOIN cities c ON c.id = b.city_id
+        WHERE b.is_active = true
+        GROUP BY c.name
+        ORDER BY total DESC, name ASC
+        LIMIT 5
+      `),
+      pool.query(`
+        SELECT
+          b.id,
+          b.name,
+          COALESCE(cat.name, '-') AS category,
+          COALESCE(c.name, '-') AS city
+        FROM businesses b
+        LEFT JOIN categories cat ON cat.id = b.category_id
+        LEFT JOIN cities c ON c.id = b.city_id
+        WHERE b.is_active = true
+        ORDER BY b.id DESC
+        LIMIT 5
+      `)
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        total_businesses: totalBusinesses.rows[0]?.total || 0,
+        top_categories: topCategories.rows,
+        top_cities: topCities.rows,
+        recent_businesses: recentBusinesses.rows
+      }
+    });
+  } catch (err) {
+    console.error('GET /api/admin/businesses/stats error:', err);
+    return res.status(500).json({ success: false });
+  }
+}
 // =====================
 // GET BY ID
 // =====================
@@ -268,6 +331,7 @@ async function createAdminBusiness(req, res) {
 
 module.exports = {
   getAdminBusinesses,
+  getAdminDashboardStats,
   getAdminBusinessById,
   updateBusiness,
   createAdminBusiness
