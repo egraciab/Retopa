@@ -1,25 +1,544 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RETOPA Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background:#f4f6f9; font-family: Arial, sans-serif; }
+    .sidebar {
+      width: 230px;
+      min-height: 100vh;
+      position: fixed;
+      left: 0;
+      top: 0;
+      background: #343a40;
+      color: #fff;
+      padding: 16px;
+    }
+    .sidebar .brand { font-size: 22px; font-weight: 700; margin-bottom: 16px; }
+    .sidebar .nav-link {
+      color: #ced4da;
+      padding: 10px 12px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      display: block;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .sidebar .nav-link:hover,
+    .sidebar .nav-link.active {
+      color: #fff;
+      background: #495057;
+    }
+    .main {
+      margin-left: 230px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      background: #fff;
+      border-bottom: 1px solid #dee2e6;
+      padding: 12px 20px;
+      font-weight: 600;
+    }
+    #content {
+      padding: 20px;
+    }
+  </style>
 </head>
-<body style="margin:0; display:flex; font-family:sans-serif;">
-  <div style="width:220px; background:#2f3542; color:white; height:100vh; padding:20px;">
-    <h2>RETOPA</h2>
-    <p><a href="dashboard.html" style="color:white;">Dashboard</a></p>
-    <p><a href="businesses.html" style="color:white;">Negocios</a></p>
-    <p><a href="claims.html" style="color:white;">Claims</a></p>
+<body>
+  <aside class="sidebar">
+    <div class="brand">RETOPA</div>
+    <a class="nav-link active" data-page="dashboard" href="/admin/layout.html#dashboard" onclick="return handleNav('dashboard', event, this)">Dashboard</a>
+    <a class="nav-link" data-page="businesses" href="/admin/layout.html#businesses" onclick="return handleNav('businesses', event, this)">Negocios</a>
+    <a class="nav-link" data-page="claims" href="/admin/layout.html#claims" onclick="return handleNav('claims', event, this)">Claims</a>
     <hr>
-    <button onclick="logout()">Salir</button>
-  </div>
-  <div style="flex:1; padding:20px;">
-    <h2>Bienvenido al panel</h2>
-  </div>
-<script>
-function logout() {
-  localStorage.removeItem('retopa_token');
-  window.location.href = 'login.html';
-}
-</script>
+    <button class="btn btn-sm btn-danger w-100" onclick="logout()">Salir</button>
+  </aside>
+
+  <main class="main">
+    <div class="topbar" id="page-title">Dashboard</div>
+    <div id="content"></div>
+  </main>
+
+  <script src="/admin/js/auth.js"></script>
+  <script>
+    const numberFormatter = new Intl.NumberFormat('es-PY');
+    let businessesDebounce = null;
+    let businessesFiltersCache = null;
+
+    function formatNumber(value) {
+      return numberFormatter.format(Number(value || 0));
+    }
+
+    function parseHashRoute() {
+      const raw = (window.location.hash || '#dashboard').slice(1);
+      const [pageRaw, queryRaw = ''] = raw.split('?');
+      const page = pageRaw || 'dashboard';
+      const params = new URLSearchParams(queryRaw);
+      return { page, params };
+    }
+
+    function buildHash(page, params) {
+      const qs = params.toString();
+      return `#${page}${qs ? `?${qs}` : ''}`;
+    }
+
+    function updateRoute(page, nextParams = {}) {
+      const params = new URLSearchParams();
+      Object.entries(nextParams).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+          params.set(key, String(value));
+        }
+      });
+
+      const nextHash = buildHash(page, params);
+      if (window.location.hash !== nextHash) {
+        window.location.hash = nextHash;
+      } else {
+        loadFromRoute().catch((err) => console.error('Route reload error:', err));
+      }
+    }
+
+    function setActiveLink(page) {
+      const selectedPage = page === 'business-edit' ? 'businesses' : page;
+      document.querySelectorAll('.sidebar .nav-link').forEach((link) => {
+        link.classList.toggle('active', link.dataset.page === selectedPage);
+      });
+    }
+
+    function getPageTitle(page) {
+      if (page === 'business-edit') return 'Editar negocio';
+      return page.charAt(0).toUpperCase() + page.slice(1);
+    }
+
+    async function renderDashboard() {
+      const totalEl = document.getElementById('dashboard-total');
+      if (totalEl) totalEl.textContent = 'Cargando...';
+
+      let stats = null;
+
+      const statsRes = await authFetch('/api/admin/businesses/stats');
+      if (statsRes && statsRes.ok) {
+        const statsData = await statsRes.json();
+        stats = statsData.data || {};
+      }
+
+      if (!stats) {
+        const fallbackRes = await authFetch('/api/admin/businesses');
+        if (!fallbackRes || !fallbackRes.ok) return;
+
+        const fallbackData = await fallbackRes.json();
+        const items = fallbackData.data || [];
+        stats = {
+          total_businesses: fallbackData.meta?.total || items.length,
+          recent_businesses: items.slice(0, 5)
+        };
+      }
+
+      const total = document.getElementById('dashboard-total');
+      total.textContent = formatNumber(stats.total_businesses || 0);
+
+      const categoriesEl = document.getElementById('dashboard-top-categories');
+      if (categoriesEl) {
+        categoriesEl.innerHTML = (stats.top_categories || [])
+          .map((item) => `<li class="list-group-item d-flex justify-content-between align-items-center"><span>${item.name}</span><strong>${formatNumber(item.total)}</strong></li>`)
+          .join('') || '<li class="list-group-item text-muted">No data</li>';
+      }
+
+      const citiesEl = document.getElementById('dashboard-top-cities');
+      if (citiesEl) {
+        citiesEl.innerHTML = (stats.top_cities || [])
+          .map((item) => `<li class="list-group-item d-flex justify-content-between align-items-center"><span>${item.name}</span><strong>${formatNumber(item.total)}</strong></li>`)
+          .join('') || '<li class="list-group-item text-muted">No data</li>';
+      }
+
+      const recentEl = document.getElementById('dashboard-recent-businesses');
+      if (recentEl) {
+        recentEl.innerHTML = (stats.recent_businesses || [])
+          .map((b) => `
+            <tr>
+              <td>${b.id}</td>
+              <td>${b.name}</td>
+              <td>${b.category || '-'}</td>
+              <td>${b.city || '-'}</td>
+            </tr>
+          `)
+          .join('') || '<tr><td colspan="4" class="text-muted">No data</td></tr>';
+      }
+
+      const legacyListEl = document.getElementById('dashboard-businesses');
+      if (legacyListEl) {
+        legacyListEl.innerHTML = (stats.recent_businesses || [])
+          .map((b) => `<li class="list-group-item">${b.name}</li>`)
+          .join('') || '<li class="list-group-item text-muted">No data</li>';
+      }
+    }
+
+    async function loadBusinessesFilters() {
+      if (businessesFiltersCache) return businessesFiltersCache;
+
+      const [citiesRes, categoriesRes] = await Promise.all([
+        authFetch('/api/cities'),
+        authFetch('/api/admin/categories')
+      ]);
+
+      const [citiesData, categoriesData] = await Promise.all([
+        citiesRes?.ok ? citiesRes.json() : Promise.resolve({ data: [] }),
+        categoriesRes?.ok ? categoriesRes.json() : Promise.resolve({ data: [] })
+      ]);
+
+      businessesFiltersCache = {
+        cities: citiesData.data || [],
+        categories: categoriesData.data || []
+      };
+
+      return businessesFiltersCache;
+    }
+
+    function applySelectOptions(selectEl, items, currentValue, emptyLabel) {
+      if (!selectEl) return;
+      selectEl.innerHTML = `<option value="">${emptyLabel}</option>` + items
+        .map((item) => `<option value="${item.id}">${item.name}</option>`)
+        .join('');
+      selectEl.value = currentValue || '';
+    }
+
+    async function renderBusinesses(routeParams) {
+      const q = routeParams.get('q') || '';
+      const page = Math.max(parseInt(routeParams.get('page') || '1', 10), 1);
+      const cityId = routeParams.get('city_id') || '';
+      const categoryId = routeParams.get('category_id') || '';
+
+      const tbody = document.getElementById('businesses-tbody');
+      const searchEl = document.getElementById('business-search');
+      const cityEl = document.getElementById('business-city-filter');
+      const categoryEl = document.getElementById('business-category-filter');
+      const prevBtn = document.getElementById('businesses-prev');
+      const nextBtn = document.getElementById('businesses-next');
+      const pageInfo = document.getElementById('businesses-page-info');
+
+      if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Loading...</td></tr>';
+
+      const filters = await loadBusinessesFilters();
+      applySelectOptions(cityEl, filters.cities, cityId, 'Todas las ciudades');
+      applySelectOptions(categoryEl, filters.categories, categoryId, 'Todas las categorías');
+      if (searchEl) searchEl.value = q;
+
+      const query = new URLSearchParams();
+      query.set('page', String(page));
+      query.set('limit', '20');
+      if (q) query.set('q', q);
+      if (cityId) query.set('city_id', cityId);
+      if (categoryId) query.set('category_id', categoryId);
+
+      const res = await authFetch(`/api/admin/businesses?${query.toString()}`);
+      if (!res) return;
+      if (!res.ok) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-danger">Error loading businesses</td></tr>';
+        return;
+      }
+
+      const data = await res.json();
+      const rows = data.data || [];
+      const meta = data.meta || { page: 1, total_pages: 1, total: rows.length };
+
+      tbody.innerHTML = '';
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No data</td></tr>';
+      }
+
+      rows.forEach((b) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${b.id}</td>
+          <td>${b.name}</td>
+          <td>${b.city || '-'}</td>
+          <td>${b.category || '-'}</td>
+          <td class="text-end">
+            <a href="/admin/layout.html#business-edit?id=${b.id}" class="btn btn-sm btn-outline-primary">Editar</a>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      if (pageInfo) {
+        pageInfo.textContent = `Página ${meta.page} de ${meta.total_pages} · ${formatNumber(meta.total)} resultados`;
+      }
+      if (prevBtn) prevBtn.disabled = meta.page <= 1;
+      if (nextBtn) nextBtn.disabled = meta.page >= meta.total_pages;
+
+      if (searchEl && !searchEl.dataset.bound) {
+        searchEl.dataset.bound = '1';
+        searchEl.addEventListener('input', () => {
+          clearTimeout(businessesDebounce);
+          businessesDebounce = setTimeout(() => {
+            updateRoute('businesses', {
+              page: 1,
+              q: searchEl.value.trim(),
+              city_id: cityEl?.value || '',
+              category_id: categoryEl?.value || ''
+            });
+          }, 300);
+        });
+      }
+
+      if (cityEl && !cityEl.dataset.bound) {
+        cityEl.dataset.bound = '1';
+        cityEl.addEventListener('change', () => {
+          updateRoute('businesses', {
+            page: 1,
+            q: searchEl?.value.trim() || '',
+            city_id: cityEl.value,
+            category_id: categoryEl?.value || ''
+          });
+        });
+      }
+
+      if (categoryEl && !categoryEl.dataset.bound) {
+        categoryEl.dataset.bound = '1';
+        categoryEl.addEventListener('change', () => {
+          updateRoute('businesses', {
+            page: 1,
+            q: searchEl?.value.trim() || '',
+            city_id: cityEl?.value || '',
+            category_id: categoryEl.value
+          });
+        });
+      }
+
+      if (prevBtn && !prevBtn.dataset.bound) {
+        prevBtn.dataset.bound = '1';
+        prevBtn.addEventListener('click', () => {
+          if (meta.page > 1) {
+            updateRoute('businesses', {
+              page: meta.page - 1,
+              q: searchEl?.value.trim() || '',
+              city_id: cityEl?.value || '',
+              category_id: categoryEl?.value || ''
+            });
+          }
+        });
+      }
+
+      if (nextBtn && !nextBtn.dataset.bound) {
+        nextBtn.dataset.bound = '1';
+        nextBtn.addEventListener('click', () => {
+          if (meta.page < meta.total_pages) {
+            updateRoute('businesses', {
+              page: meta.page + 1,
+              q: searchEl?.value.trim() || '',
+              city_id: cityEl?.value || '',
+              category_id: categoryEl?.value || ''
+            });
+          }
+        });
+      }
+    }
+
+    async function renderBusinessEdit(routeParams) {
+      const id = routeParams.get('id');
+      const feedbackEl = document.getElementById('business-edit-feedback');
+      const form = document.getElementById('business-edit-form');
+      const submitBtn = document.getElementById('business-edit-submit');
+
+      if (!id) {
+        feedbackEl.innerHTML = '<div class="alert alert-danger">ID inválido para edición.</div>';
+        if (form) form.classList.add('d-none');
+        return;
+      }
+
+      feedbackEl.innerHTML = '<div class="text-muted">Loading...</div>';
+
+      const [filters, businessRes] = await Promise.all([
+        loadBusinessesFilters(),
+        authFetch(`/api/admin/businesses/${id}`)
+      ]);
+
+      if (!businessRes || !businessRes.ok) {
+        feedbackEl.innerHTML = '<div class="alert alert-danger">No se pudo cargar el negocio.</div>';
+        if (form) form.classList.add('d-none');
+        return;
+      }
+
+      const businessJson = await businessRes.json();
+      const b = businessJson.data || {};
+
+      const nameEl = document.getElementById('edit-name');
+      const phoneEl = document.getElementById('edit-phone');
+      const websiteEl = document.getElementById('edit-website');
+      const cityEl = document.getElementById('edit-city-id');
+      const categoryEl = document.getElementById('edit-category-id');
+
+      applySelectOptions(cityEl, filters.cities, b.city_id, 'Sin ciudad');
+      applySelectOptions(categoryEl, filters.categories, b.category_id, 'Sin categoría');
+
+      nameEl.value = b.name || '';
+      phoneEl.value = b.phone || '';
+      websiteEl.value = b.website || '';
+      feedbackEl.innerHTML = '';
+
+      if (!form.dataset.bound) {
+        form.dataset.bound = '1';
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          submitBtn.disabled = true;
+          feedbackEl.innerHTML = '<div class="text-muted">Guardando...</div>';
+
+          const payload = {
+            name: nameEl.value.trim(),
+            phone: phoneEl.value.trim() || null,
+            website: websiteEl.value.trim() || null,
+            city_id: cityEl.value || null,
+            category_id: categoryEl.value || null
+          };
+
+          const updateRes = await authFetch(`/api/admin/businesses/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          submitBtn.disabled = false;
+          if (!updateRes || !updateRes.ok) {
+            feedbackEl.innerHTML = '<div class="alert alert-danger">Error al guardar cambios.</div>';
+            return;
+          }
+
+          feedbackEl.innerHTML = '<div class="alert alert-success">Cambios guardados correctamente.</div>';
+        });
+      }
+    }
+
+    function getClaimStatusBadge(status) {
+      const normalized = (status || '').toLowerCase();
+      if (normalized === 'approved') return '<span class="badge bg-success">approved</span>';
+      if (normalized === 'rejected') return '<span class="badge bg-danger">rejected</span>';
+      return '<span class="badge bg-warning text-dark">pending</span>';
+    }
+
+    async function updateClaimStatus(id, status) {
+      const res = await authFetch(`/api/admin/claims/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (!res || !res.ok) {
+        alert('No se pudo actualizar el claim.');
+        return;
+      }
+      await renderClaims();
+    }
+
+    async function renderClaims() {
+      const res = await authFetch('/api/admin/claims');
+      if (!res) return;
+      const tbody = document.getElementById('claims-tbody');
+      if (!tbody) return;
+
+      if (!res.ok) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-danger">Error loading claims</td></tr>';
+        return;
+      }
+
+      const data = await res.json();
+      const claims = data.data || [];
+
+      if (!claims.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-muted">No data</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = claims.map((c) => `
+        <tr>
+          <td>${c.id}</td>
+          <td>${c.business_name || '-'}</td>
+          <td>${c.full_name || '-'}</td>
+          <td>${c.email || '-'}</td>
+          <td>${getClaimStatusBadge(c.status)}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-success me-1 claim-action-btn"
+              data-id="${c.id}" data-status="approved"
+              ${c.status === 'approved' ? 'disabled' : ''}>Approve</button>
+            <button class="btn btn-sm btn-outline-danger claim-action-btn"
+              data-id="${c.id}" data-status="rejected"
+              ${c.status === 'rejected' ? 'disabled' : ''}>Reject</button>
+          </td>
+        </tr>
+      `).join('');
+
+      tbody.querySelectorAll('.claim-action-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          await updateClaimStatus(btn.dataset.id, btn.dataset.status);
+        });
+      });
+    }
+
+    const pageRenderers = {
+      dashboard: renderDashboard,
+      businesses: renderBusinesses,
+      'business-edit': renderBusinessEdit,
+      claims: renderClaims
+    };
+
+    function handleNav(page, event, linkEl) {
+      if (event) event.preventDefault();
+      const defaults = page === 'businesses' ? { page: 1 } : {};
+      updateRoute(page, defaults);
+      return false;
+    }
+
+    async function loadPage(page, linkEl, routeParams = new URLSearchParams()) {
+      const pageFile = page === 'business-edit' ? 'business-edit-view' : page;
+      const res = await fetch(`/admin/${pageFile}.html`);
+      if (!res.ok) {
+        document.getElementById('content').innerHTML = '<div class="alert alert-danger">No se pudo cargar la página.</div>';
+        return;
+      }
+
+      const html = await res.text();
+      document.getElementById('content').innerHTML = html;
+      document.getElementById('page-title').textContent = getPageTitle(page);
+      setActiveLink(page);
+      if (linkEl) linkEl.blur();
+
+      const renderer = pageRenderers[page];
+      if (renderer) await renderer(routeParams);
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      window.location.href = '/admin/login.html';
+    }
+
+    async function loadFromRoute() {
+      const { page, params } = parseHashRoute();
+      const safePage = pageRenderers[page] ? page : 'dashboard';
+      await loadPage(safePage, null, params);
+    }
+
+    async function initLayout() {
+      try {
+        const user = await requireSession();
+        if (!user) return;
+        await loadFromRoute();
+      } catch (err) {
+        console.error('Layout init error:', err);
+        document.getElementById('content').innerHTML = '<div class="alert alert-danger">Error cargando panel. Vuelve a iniciar sesión.</div>';
+      }
+    }
+
+    window.addEventListener('hashchange', () => {
+      loadFromRoute().catch((err) => {
+        console.error('Hash navigation error:', err);
+      });
+    });
+
+    initLayout();
+  </script>
 </body>
 </html>
