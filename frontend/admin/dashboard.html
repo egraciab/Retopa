@@ -1,27 +1,54 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Dashboard</title>
-  <script src="/admin/js/auth.js"></script>
-</head>
-<body>
-  <h1>Dashboard</h1>
+<script>
+  if (window.top === window.self) {
+    window.location.replace('/admin/layout.html#dashboard');
+  }
+</script>
 
-  <div id="content"></div>
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body d-flex flex-column justify-content-center">
+        <h6 class="text-muted mb-2">Total negocios (global)</h6>
+        <h2 id="dashboard-total" class="mb-0">Cargando...</h2>
+      </div>
+    </div>
+  </div>
+</div>
 
-  <script>
-    async function load() {
-      const res = await authFetch('/api/admin/businesses');
+<div class="row g-3 mt-1">
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header">Top categorías</div>
+      <ul class="list-group list-group-flush" id="dashboard-top-categories">
+        <li class="list-group-item text-muted">Cargando...</li>
+      </ul>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header">Top ciudades</div>
+      <ul class="list-group list-group-flush" id="dashboard-top-cities">
+        <li class="list-group-item text-muted">Cargando...</li>
+      </ul>
+    </div>
+  </div>
+</div>
 
-      if (!res) return;
-
-      const data = await res.json();
-
-      document.getElementById('content').innerHTML =
-        JSON.stringify(data, null, 2);
-    }
-
-    load();
-  </script>
-</body>
-</html>
+<div class="card mt-3 shadow-sm">
+  <div class="card-header">5 negocios más recientes</div>
+  <div class="table-responsive">
+    <table class="table mb-0">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nombre</th>
+          <th>Categoría</th>
+          <th>Ciudad</th>
+        </tr>
+      </thead>
+      <tbody id="dashboard-recent-businesses">
+        <tr><td colspan="4" class="text-muted">Cargando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
