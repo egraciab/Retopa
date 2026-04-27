@@ -65,6 +65,7 @@
     <div class="brand">RETOPA</div>
     <a class="nav-link active" data-page="dashboard" href="/admin/layout.html#dashboard" onclick="return handleNav('dashboard', event, this)">Dashboard</a>
     <a class="nav-link" data-page="businesses" href="/admin/layout.html#businesses" onclick="return handleNav('businesses', event, this)">Negocios</a>
+    <a class="nav-link" data-page="categories" href="/admin/layout.html#categories" onclick="return handleNav('categories', event, this)">Categorías</a>
     <a class="nav-link" data-page="claims" href="/admin/layout.html#claims" onclick="return handleNav('claims', event, this)">Claims</a>
     <hr>
     <button class="btn btn-sm btn-danger w-100" onclick="logout()">Salir</button>
@@ -77,6 +78,7 @@
   <div id="app-notifications"></div>
 
   <script src="/admin/js/auth.js"></script>
+  <script src="/admin/js/business-form.js"></script>
   <script>
     const numberFormatter = new Intl.NumberFormat('es-PY');
     let businessesDebounce = null;
@@ -134,8 +136,15 @@
       return window.confirm(message);
     }
 
+    function setTableMessage(tbody, colspan, message, tone = 'muted') {
+      if (!tbody) return;
+      tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-${tone}">${message}</td></tr>`;
+    }
+
     function setActiveLink(page) {
-      const selectedPage = page === 'business-edit' ? 'businesses' : page;
+      const selectedPage = (page === 'business-edit' || page === 'business-create')
+        ? 'businesses'
+        : page;
       document.querySelectorAll('.sidebar .nav-link').forEach((link) => {
         link.classList.toggle('active', link.dataset.page === selectedPage);
       });
@@ -143,6 +152,8 @@
 
     function getPageTitle(page) {
       if (page === 'business-edit') return 'Editar negocio';
+      if (page === 'business-create') return 'Nuevo negocio';
+      if (page === 'categories') return 'Categorías';
       return page.charAt(0).toUpperCase() + page.slice(1);
     }
 
@@ -230,6 +241,10 @@
       return businessesFiltersCache;
     }
 
+    function invalidateBusinessesFiltersCache() {
+      businessesFiltersCache = null;
+    }
+
     function applySelectOptions(selectEl, items, currentValue, emptyLabel) {
       if (!selectEl) return;
       selectEl.innerHTML = `<option value="">${emptyLabel}</option>` + items
@@ -252,7 +267,7 @@
       const nextBtn = document.getElementById('businesses-next');
       const pageInfo = document.getElementById('businesses-page-info');
 
-      if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Loading...</td></tr>';
+      setTableMessage(tbody, 8, 'Loading...');
 
       const filters = await loadBusinessesFilters();
       applySelectOptions(cityEl, filters.cities, cityId, 'Todas las ciudades');
@@ -268,32 +283,43 @@
 
       const res = await authFetch(`/api/admin/businesses?${query.toString()}`);
       if (!res) return;
-      if (!res.ok) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-danger">Error loading businesses</td></tr>';
-        return;
-      }
+      if (!res.ok) return setTableMessage(tbody, 8, 'Error loading businesses', 'danger');
 
       const data = await res.json();
       const rows = data.data || [];
       const meta = data.meta || { page: 1, total_pages: 1, total: rows.length };
 
       tbody.innerHTML = '';
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No data</td></tr>';
-      }
+      if (!rows.length) setTableMessage(tbody, 8, 'No businesses found');
 
       rows.forEach((b) => {
         const tr = document.createElement('tr');
+        tr.className = 'align-middle';
         tr.innerHTML = `
-          <td>${b.id}</td>
           <td>${b.name}</td>
           <td>${b.city || '-'}</td>
           <td>${b.category || '-'}</td>
+          <td>${b.phone || '-'}</td>
+          <td>${b.email || '-'}</td>
+          <td>${b.website ? `<a href="${b.website}" target="_blank" rel="noopener noreferrer">Abrir</a>` : '-'}</td>
           <td class="text-end">
-            <a href="/admin/layout.html#business-edit?id=${b.id}" class="btn btn-sm btn-outline-primary">Editar</a>
+            <a href="/admin/layout.html#business-edit?id=${b.id}" class="btn btn-sm btn-primary me-1">Editar</a>
+            <button class="btn btn-sm btn-danger business-delete-btn" data-id="${b.id}">Eliminar</button>
           </td>
         `;
+        tr.addEventListener('click', (event) => {
+          if (event.target.closest('button') || event.target.closest('a')) return;
+          updateRoute('business-edit', { id: b.id });
+        });
         tbody.appendChild(tr);
+      });
+
+      tbody.querySelectorAll('.business-delete-btn').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          await deleteBusinessById(btn.dataset.id);
+        });
       });
 
       if (pageInfo) {
@@ -370,86 +396,141 @@
       }
     }
 
-    async function renderBusinessEdit(routeParams) {
-      const id = routeParams.get('id');
-      const feedbackEl = document.getElementById('business-edit-feedback');
-      const form = document.getElementById('business-edit-form');
-      const submitBtn = document.getElementById('business-edit-submit');
+    async function deleteBusinessById(id) {
+      if (!confirmAction('¿Eliminar este negocio? Esta acción no se puede deshacer.')) return;
 
-      if (!id) {
+      const res = await authFetch(`/api/admin/businesses/${id}`, {
+        method: 'DELETE'
+      });
+      if (!res || !res.ok) {
+        showNotification('No se pudo eliminar el negocio.', 'danger');
+        return;
+      }
+
+      showNotification('Negocio eliminado correctamente.', 'success');
+      await loadFromRoute();
+    }
+
+    async function renderBusinessForm(mode, routeParams) {
+      const id = routeParams.get('id');
+      const feedbackEl = document.getElementById('business-form-feedback');
+      const form = document.getElementById('business-form');
+      const submitBtn = document.getElementById('business-form-submit');
+      const titleEl = document.getElementById('business-form-title');
+      const deleteBtn = document.getElementById('business-form-delete');
+      const nameEl = document.getElementById('bf-name');
+      const addressEl = document.getElementById('bf-address');
+      const phoneEl = document.getElementById('bf-phone');
+      const emailEl = document.getElementById('bf-email');
+      const websiteEl = document.getElementById('bf-website');
+      const cityEl = document.getElementById('bf-city-id');
+      const categoryEl = document.getElementById('bf-category-id');
+      const sourceEl = document.getElementById('bf-source');
+      const claimedEl = document.getElementById('bf-claimed');
+      const latitudeEl = document.getElementById('bf-latitude');
+      const longitudeEl = document.getElementById('bf-longitude');
+
+      if (!feedbackEl || !form || !submitBtn) return;
+      titleEl.textContent = mode === 'create' ? 'Nuevo negocio' : 'Editar negocio';
+      deleteBtn.classList.toggle('d-none', mode === 'create');
+      submitBtn.textContent = mode === 'create' ? 'Crear negocio' : 'Guardar cambios';
+
+      if (mode === 'edit' && !id) {
         feedbackEl.innerHTML = '<div class="alert alert-danger">ID inválido para edición.</div>';
-        if (form) form.classList.add('d-none');
+        form.classList.add('d-none');
         return;
       }
 
       feedbackEl.innerHTML = '<div class="text-muted">Loading...</div>';
+      form.classList.remove('d-none');
 
-      const [filters, businessRes] = await Promise.all([
-        loadBusinessesFilters(),
-        authFetch(`/api/admin/businesses/${id}`)
-      ]);
+      const filters = await loadBusinessesFilters();
+      let b = {};
+      if (mode === 'edit') {
+        const businessRes = await authFetch(`/api/admin/businesses/${id}`);
+        if (!businessRes || !businessRes.ok) {
+          feedbackEl.innerHTML = '<div class="alert alert-danger">No se pudo cargar el negocio.</div>';
+          form.classList.add('d-none');
+          return;
+        }
 
-      if (!businessRes || !businessRes.ok) {
-        feedbackEl.innerHTML = '<div class="alert alert-danger">No se pudo cargar el negocio.</div>';
-        if (form) form.classList.add('d-none');
-        return;
+        const businessJson = await businessRes.json();
+        b = businessJson.data || {};
       }
-
-      const businessJson = await businessRes.json();
-      const b = businessJson.data || {};
-
-      const nameEl = document.getElementById('edit-name');
-      const phoneEl = document.getElementById('edit-phone');
-      const websiteEl = document.getElementById('edit-website');
-      const cityEl = document.getElementById('edit-city-id');
-      const categoryEl = document.getElementById('edit-category-id');
 
       applySelectOptions(cityEl, filters.cities, b.city_id, 'Sin ciudad');
       applySelectOptions(categoryEl, filters.categories, b.category_id, 'Sin categoría');
 
       nameEl.value = b.name || '';
+      addressEl.value = b.address || '';
       phoneEl.value = b.phone || '';
+      emailEl.value = b.email || '';
       websiteEl.value = b.website || '';
+      sourceEl.value = b.source || 'manual';
+      claimedEl.checked = !!b.claimed;
+      latitudeEl.value = b.latitude ?? '';
+      longitudeEl.value = b.longitude ?? '';
       feedbackEl.innerHTML = '';
 
-      if (!form.dataset.bound) {
-        form.dataset.bound = '1';
-        form.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          submitBtn.disabled = true;
-          feedbackEl.innerHTML = '<div class="text-muted">Guardando...</div>';
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        submitBtn.disabled = true;
+        feedbackEl.innerHTML = '<div class="text-muted">Guardando...</div>';
 
-          const payload = {
-            name: nameEl.value.trim(),
-            phone: phoneEl.value.trim() || null,
-            website: websiteEl.value.trim() || null,
-            city_id: cityEl.value || null,
-            category_id: categoryEl.value || null
-          };
-
-          if (!confirmAction('¿Guardar cambios del negocio?')) {
-            submitBtn.disabled = false;
-            feedbackEl.innerHTML = '';
-            return;
-          }
-
-          const updateRes = await authFetch(`/api/admin/businesses/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-
+        const rawPayload = {
+          name: nameEl.value,
+          address: addressEl.value,
+          phone: phoneEl.value,
+          email: emailEl.value,
+          website: websiteEl.value,
+          city_id: cityEl.value,
+          category_id: categoryEl.value,
+          source: sourceEl.value,
+          claimed: claimedEl.checked,
+          latitude: latitudeEl.value,
+          longitude: longitudeEl.value
+        };
+        const payload = window.BusinessForm.normalizeBusinessPayload(rawPayload);
+        const validationError = window.BusinessForm.validateBusinessForm(payload);
+        if (validationError) {
           submitBtn.disabled = false;
-          if (!updateRes || !updateRes.ok) {
-            feedbackEl.innerHTML = '<div class="alert alert-danger">Error al guardar cambios.</div>';
-            showNotification('No se pudo guardar el negocio.', 'danger');
-            return;
-          }
+          feedbackEl.innerHTML = `<div class="alert alert-danger">${validationError}</div>`;
+          return;
+        }
 
-          feedbackEl.innerHTML = '<div class="alert alert-success">Cambios guardados correctamente.</div>';
-          showNotification('Negocio actualizado correctamente.', 'success');
+        const isCreate = mode === 'create';
+        const endpoint = isCreate ? '/api/admin/businesses' : `/api/admin/businesses/${id}`;
+        const method = isCreate ? 'POST' : 'PUT';
+
+        const saveRes = await authFetch(endpoint, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         });
-      }
+
+        submitBtn.disabled = false;
+        if (!saveRes || !saveRes.ok) {
+          feedbackEl.innerHTML = '<div class="alert alert-danger">Error al guardar cambios.</div>';
+          showNotification('No se pudo guardar el negocio.', 'danger');
+          return;
+        }
+
+        showNotification(isCreate ? 'Negocio creado correctamente.' : 'Negocio actualizado correctamente.', 'success');
+        updateRoute('businesses', { page: 1 });
+      };
+
+      deleteBtn.onclick = async () => {
+        if (mode !== 'edit') return;
+        await deleteBusinessById(id);
+      };
+    }
+
+    async function renderBusinessCreate(routeParams) {
+      await renderBusinessForm('create', routeParams);
+    }
+
+    async function renderBusinessEdit(routeParams) {
+      await renderBusinessForm('edit', routeParams);
     }
 
     function getClaimStatusBadge(status) {
@@ -482,18 +563,12 @@
       const tbody = document.getElementById('claims-tbody');
       if (!tbody) return;
 
-      if (!res.ok) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-danger">Error loading claims</td></tr>';
-        return;
-      }
+      if (!res.ok) return setTableMessage(tbody, 6, 'Error loading claims', 'danger');
 
       const data = await res.json();
       const claims = data.data || [];
 
-      if (!claims.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-muted">No data</td></tr>';
-        return;
-      }
+      if (!claims.length) return setTableMessage(tbody, 6, 'No data');
 
       tbody.innerHTML = claims.map((c) => `
         <tr>
@@ -522,10 +597,115 @@
       });
     }
 
+    async function renderCategories() {
+      const tbody = document.getElementById('categories-tbody');
+      const formWrap = document.getElementById('category-form-wrap');
+      const idEl = document.getElementById('category-id');
+      const nameEl = document.getElementById('category-name');
+      const slugEl = document.getElementById('category-slug');
+      const createBtn = document.getElementById('category-create-btn');
+      const saveBtn = document.getElementById('category-save-btn');
+      const cancelBtn = document.getElementById('category-cancel-btn');
+
+      if (!tbody) return;
+      setTableMessage(tbody, 3, 'Loading...');
+
+      const res = await authFetch('/api/categories');
+      if (!res || !res.ok) return setTableMessage(tbody, 3, 'Error loading categories', 'danger');
+
+      const data = await res.json();
+      const rows = data.data || [];
+      if (!rows.length) {
+        setTableMessage(tbody, 3, 'No categories found');
+      } else {
+        tbody.innerHTML = rows.map((c) => `
+          <tr>
+            <td>${c.name}</td>
+            <td>${c.slug || '-'}</td>
+            <td class="text-end">
+              <button class="btn btn-sm btn-primary me-1 category-edit-btn"
+                data-id="${c.id}" data-name="${c.name}" data-slug="${c.slug || ''}">Editar</button>
+              <button class="btn btn-sm btn-danger category-delete-btn"
+                data-id="${c.id}" data-name="${c.name}">Eliminar</button>
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      const openForm = (category = null) => {
+        formWrap.classList.remove('d-none');
+        idEl.value = category?.id || '';
+        nameEl.value = category?.name || '';
+        slugEl.value = category?.slug || '';
+      };
+      const closeForm = () => {
+        formWrap.classList.add('d-none');
+        idEl.value = '';
+        nameEl.value = '';
+        slugEl.value = '';
+      };
+
+      createBtn.onclick = () => openForm();
+      cancelBtn.onclick = () => closeForm();
+      saveBtn.onclick = async () => {
+        const name = nameEl.value.trim();
+        if (!name) {
+          showNotification('El nombre es requerido.', 'danger');
+          return;
+        }
+
+        const id = idEl.value;
+        const endpoint = id ? `/api/admin/categories/${id}` : '/api/admin/categories';
+        const method = id ? 'PUT' : 'POST';
+        const saveRes = await authFetch(endpoint, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, slug: slugEl.value.trim() || null })
+        });
+        if (!saveRes || !saveRes.ok) {
+          showNotification('No se pudo guardar la categoría.', 'danger');
+          return;
+        }
+
+        showNotification('Categoría guardada correctamente.', 'success');
+        invalidateBusinessesFiltersCache();
+        await renderCategories();
+        closeForm();
+      };
+
+      tbody.querySelectorAll('.category-edit-btn').forEach((btn) => {
+        btn.onclick = () => openForm({
+          id: btn.dataset.id,
+          name: btn.dataset.name,
+          slug: btn.dataset.slug
+        });
+      });
+
+      tbody.querySelectorAll('.category-delete-btn').forEach((btn) => {
+        btn.onclick = async () => {
+          if (!confirmAction(`¿Eliminar categoría "${btn.dataset.name}"?`)) return;
+
+          const delRes = await authFetch(`/api/admin/categories/${btn.dataset.id}`, {
+            method: 'DELETE'
+          });
+          if (!delRes || !delRes.ok) {
+            showNotification('No se pudo eliminar la categoría.', 'danger');
+            return;
+          }
+
+          showNotification('Categoría eliminada correctamente.', 'success');
+          invalidateBusinessesFiltersCache();
+          await renderCategories();
+        };
+      });
+    }
+
     const pageRenderers = {
       dashboard: renderDashboard,
       businesses: renderBusinesses,
+      'business-create': renderBusinessCreate,
       'business-edit': renderBusinessEdit,
+      categories: renderCategories,
       claims: renderClaims
     };
 
@@ -541,7 +721,9 @@
     }
 
     async function loadPage(page, linkEl, routeParams = new URLSearchParams()) {
-      const pageFile = page === 'business-edit' ? 'business-edit-view' : page;
+      const pageFile = (page === 'business-edit' || page === 'business-create')
+        ? 'business-form-view'
+        : page;
       const res = await fetch(`/admin/${pageFile}.html`);
       if (!res.ok) {
         document.getElementById('content').innerHTML = '<div class="alert alert-danger">No se pudo cargar la página.</div>';
