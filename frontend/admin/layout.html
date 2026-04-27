@@ -47,6 +47,17 @@
     #content {
       padding: 20px;
     }
+    #app-notifications {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 1080;
+      width: min(380px, calc(100vw - 32px));
+    }
+    .app-toast {
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
@@ -63,12 +74,14 @@
     <div class="topbar" id="page-title">Dashboard</div>
     <div id="content"></div>
   </main>
+  <div id="app-notifications"></div>
 
   <script src="/admin/js/auth.js"></script>
   <script>
     const numberFormatter = new Intl.NumberFormat('es-PY');
     let businessesDebounce = null;
     let businessesFiltersCache = null;
+    const routeStateMemory = new Map();
 
     function formatNumber(value) {
       return numberFormatter.format(Number(value || 0));
@@ -96,11 +109,29 @@
       });
 
       const nextHash = buildHash(page, params);
-      if (window.location.hash !== nextHash) {
-        window.location.hash = nextHash;
+      if (window.location.hash !== nextHash || window.history.state?.hash !== nextHash) {
+        window.history.pushState({ hash: nextHash }, '', nextHash);
+        loadFromRoute().catch((err) => console.error('Route reload error:', err));
       } else {
         loadFromRoute().catch((err) => console.error('Route reload error:', err));
       }
+    }
+
+    function showNotification(message, type = 'success', timeoutMs = 2600) {
+      const container = document.getElementById('app-notifications');
+      if (!container) return;
+
+      const toast = document.createElement('div');
+      toast.className = `alert alert-${type} app-toast`;
+      toast.role = 'alert';
+      toast.textContent = message;
+      container.appendChild(toast);
+
+      setTimeout(() => toast.remove(), timeoutMs);
+    }
+
+    function confirmAction(message) {
+      return window.confirm(message);
     }
 
     function setActiveLink(page) {
@@ -396,6 +427,12 @@
             category_id: categoryEl.value || null
           };
 
+          if (!confirmAction('¿Guardar cambios del negocio?')) {
+            submitBtn.disabled = false;
+            feedbackEl.innerHTML = '';
+            return;
+          }
+
           const updateRes = await authFetch(`/api/admin/businesses/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -405,10 +442,12 @@
           submitBtn.disabled = false;
           if (!updateRes || !updateRes.ok) {
             feedbackEl.innerHTML = '<div class="alert alert-danger">Error al guardar cambios.</div>';
+            showNotification('No se pudo guardar el negocio.', 'danger');
             return;
           }
 
           feedbackEl.innerHTML = '<div class="alert alert-success">Cambios guardados correctamente.</div>';
+          showNotification('Negocio actualizado correctamente.', 'success');
         });
       }
     }
@@ -421,15 +460,19 @@
     }
 
     async function updateClaimStatus(id, status) {
+      const actionLabel = status === 'approved' ? 'aprobar' : 'rechazar';
+      if (!confirmAction(`¿Deseas ${actionLabel} este claim?`)) return;
+
       const res = await authFetch(`/api/admin/claims/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
       });
       if (!res || !res.ok) {
-        alert('No se pudo actualizar el claim.');
+        showNotification('No se pudo actualizar el claim.', 'danger');
         return;
       }
+      showNotification(`Claim ${status === 'approved' ? 'aprobado' : 'rechazado'}.`, 'success');
       await renderClaims();
     }
 
@@ -460,10 +503,10 @@
           <td>${c.email || '-'}</td>
           <td>${getClaimStatusBadge(c.status)}</td>
           <td class="text-end">
-            <button class="btn btn-sm btn-outline-success me-1 claim-action-btn"
+            <button class="btn btn-sm btn-success me-1 claim-action-btn"
               data-id="${c.id}" data-status="approved"
               ${c.status === 'approved' ? 'disabled' : ''}>Approve</button>
-            <button class="btn btn-sm btn-outline-danger claim-action-btn"
+            <button class="btn btn-sm btn-danger claim-action-btn"
               data-id="${c.id}" data-status="rejected"
               ${c.status === 'rejected' ? 'disabled' : ''}>Reject</button>
           </td>
@@ -474,6 +517,7 @@
         btn.addEventListener('click', async () => {
           btn.disabled = true;
           await updateClaimStatus(btn.dataset.id, btn.dataset.status);
+          btn.disabled = false;
         });
       });
     }
@@ -487,8 +531,12 @@
 
     function handleNav(page, event, linkEl) {
       if (event) event.preventDefault();
-      const defaults = page === 'businesses' ? { page: 1 } : {};
-      updateRoute(page, defaults);
+      if (page === 'businesses') {
+        const remembered = routeStateMemory.get('businesses');
+        updateRoute(page, remembered || { page: 1 });
+      } else {
+        updateRoute(page, {});
+      }
       return false;
     }
 
@@ -518,6 +566,9 @@
     async function loadFromRoute() {
       const { page, params } = parseHashRoute();
       const safePage = pageRenderers[page] ? page : 'dashboard';
+      if (safePage === 'businesses') {
+        routeStateMemory.set('businesses', Object.fromEntries(params.entries()));
+      }
       await loadPage(safePage, null, params);
     }
 
@@ -535,6 +586,12 @@
     window.addEventListener('hashchange', () => {
       loadFromRoute().catch((err) => {
         console.error('Hash navigation error:', err);
+      });
+    });
+
+    window.addEventListener('popstate', () => {
+      loadFromRoute().catch((err) => {
+        console.error('Popstate navigation error:', err);
       });
     });
 
