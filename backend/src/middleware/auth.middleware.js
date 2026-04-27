@@ -5,19 +5,30 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET is required');
 }
 
+function getTokenFromRequest(req) {
+  const authHeader = req.headers.authorization || '';
+  if (!authHeader.startsWith('Bearer ')) return null;
+
+  const token = authHeader.slice(7).trim();
+  return token || null;
+}
+
+function verifyRequestToken(req) {
+  const token = getTokenFromRequest(req);
+  if (!token) return null;
+
+  return jwt.verify(token, JWT_SECRET);
+}
+
 function requireAuth(req, res, next) {
   try {
-    const authHeader = req.headers.authorization || '';
-
-    if (!authHeader.startsWith('Bearer ')) {
+    const payload = verifyRequestToken(req);
+    if (!payload) {
       return res.status(401).json({
         success: false,
         message: 'Missing or invalid token'
       });
     }
-
-    const token = authHeader.split(' ')[1];
-    const payload = jwt.verify(token, JWT_SECRET);
 
     req.user = payload;
     next();
@@ -30,23 +41,19 @@ function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-  if (!req.user) {
-    return res.status(403).json({
-      success: false,
-      message: 'Forbidden'
-    });
-  }
+  return requireAuth(req, res, () => {
+    const role = String(req.user?.role || '').toLowerCase();
+    const allowedRoles = new Set(['admin', 'superadmin']);
 
-  const role = (req.user.role || '').toLowerCase();
+    if (!allowedRoles.has(role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden'
+      });
+    }
 
-  if (role !== 'admin' && role !== 'superadmin') {
-    return res.status(403).json({
-      success: false,
-      message: 'Forbidden'
-    });
-  }
-
-  next();
+    next();
+  });
 }
 
 module.exports = { requireAuth, requireAdmin };

@@ -1,25 +1,783 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RETOPA Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background:#f4f6f9; font-family: Arial, sans-serif; }
+    .sidebar {
+      width: 230px;
+      min-height: 100vh;
+      position: fixed;
+      left: 0;
+      top: 0;
+      background: #343a40;
+      color: #fff;
+      padding: 16px;
+    }
+    .sidebar .brand { font-size: 22px; font-weight: 700; margin-bottom: 16px; }
+    .sidebar .nav-link {
+      color: #ced4da;
+      padding: 10px 12px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      display: block;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .sidebar .nav-link:hover,
+    .sidebar .nav-link.active {
+      color: #fff;
+      background: #495057;
+    }
+    .main {
+      margin-left: 230px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      background: #fff;
+      border-bottom: 1px solid #dee2e6;
+      padding: 12px 20px;
+      font-weight: 600;
+    }
+    #content {
+      padding: 20px;
+    }
+    #app-notifications {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 1080;
+      width: min(380px, calc(100vw - 32px));
+    }
+    .app-toast {
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+      margin-bottom: 10px;
+    }
+  </style>
 </head>
-<body style="margin:0; display:flex; font-family:sans-serif;">
-  <div style="width:220px; background:#2f3542; color:white; height:100vh; padding:20px;">
-    <h2>RETOPA</h2>
-    <p><a href="dashboard.html" style="color:white;">Dashboard</a></p>
-    <p><a href="businesses.html" style="color:white;">Negocios</a></p>
-    <p><a href="claims.html" style="color:white;">Claims</a></p>
+<body>
+  <aside class="sidebar">
+    <div class="brand">RETOPA</div>
+    <a class="nav-link active" data-page="dashboard" href="/admin/layout.html#dashboard" onclick="return handleNav('dashboard', event, this)">Dashboard</a>
+    <a class="nav-link" data-page="businesses" href="/admin/layout.html#businesses" onclick="return handleNav('businesses', event, this)">Negocios</a>
+    <a class="nav-link" data-page="categories" href="/admin/layout.html#categories" onclick="return handleNav('categories', event, this)">Categorías</a>
+    <a class="nav-link" data-page="claims" href="/admin/layout.html#claims" onclick="return handleNav('claims', event, this)">Claims</a>
     <hr>
-    <button onclick="logout()">Salir</button>
-  </div>
-  <div style="flex:1; padding:20px;">
-    <h2>Bienvenido al panel</h2>
-  </div>
-<script>
-function logout() {
-  localStorage.removeItem('retopa_token');
-  window.location.href = 'login.html';
-}
-</script>
+    <button class="btn btn-sm btn-danger w-100" onclick="logout()">Salir</button>
+  </aside>
+
+  <main class="main">
+    <div class="topbar" id="page-title">Dashboard</div>
+    <div id="content"></div>
+  </main>
+  <div id="app-notifications"></div>
+
+  <script src="/admin/js/auth.js"></script>
+  <script src="/admin/js/business-form.js"></script>
+  <script>
+    const numberFormatter = new Intl.NumberFormat('es-PY');
+    let businessesDebounce = null;
+    let businessesFiltersCache = null;
+    const routeStateMemory = new Map();
+
+    function formatNumber(value) {
+      return numberFormatter.format(Number(value || 0));
+    }
+
+    function parseHashRoute() {
+      const raw = (window.location.hash || '#dashboard').slice(1);
+      const [pageRaw, queryRaw = ''] = raw.split('?');
+      const page = pageRaw || 'dashboard';
+      const params = new URLSearchParams(queryRaw);
+      return { page, params };
+    }
+
+    function buildHash(page, params) {
+      const qs = params.toString();
+      return `#${page}${qs ? `?${qs}` : ''}`;
+    }
+
+    function updateRoute(page, nextParams = {}) {
+      const params = new URLSearchParams();
+      Object.entries(nextParams).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+          params.set(key, String(value));
+        }
+      });
+
+      const nextHash = buildHash(page, params);
+      if (window.location.hash !== nextHash || window.history.state?.hash !== nextHash) {
+        window.history.pushState({ hash: nextHash }, '', nextHash);
+        loadFromRoute().catch((err) => console.error('Route reload error:', err));
+      } else {
+        loadFromRoute().catch((err) => console.error('Route reload error:', err));
+      }
+    }
+
+    function showNotification(message, type = 'success', timeoutMs = 2600) {
+      const container = document.getElementById('app-notifications');
+      if (!container) return;
+
+      const toast = document.createElement('div');
+      toast.className = `alert alert-${type} app-toast`;
+      toast.role = 'alert';
+      toast.textContent = message;
+      container.appendChild(toast);
+
+      setTimeout(() => toast.remove(), timeoutMs);
+    }
+
+    function confirmAction(message) {
+      return window.confirm(message);
+    }
+
+    function setTableMessage(tbody, colspan, message, tone = 'muted') {
+      if (!tbody) return;
+      tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-${tone}">${message}</td></tr>`;
+    }
+
+    function setActiveLink(page) {
+      const selectedPage = (page === 'business-edit' || page === 'business-create')
+        ? 'businesses'
+        : page;
+      document.querySelectorAll('.sidebar .nav-link').forEach((link) => {
+        link.classList.toggle('active', link.dataset.page === selectedPage);
+      });
+    }
+
+    function getPageTitle(page) {
+      if (page === 'business-edit') return 'Editar negocio';
+      if (page === 'business-create') return 'Nuevo negocio';
+      if (page === 'categories') return 'Categorías';
+      return page.charAt(0).toUpperCase() + page.slice(1);
+    }
+
+    async function renderDashboard() {
+      const totalEl = document.getElementById('dashboard-total');
+      if (totalEl) totalEl.textContent = 'Cargando...';
+
+      let stats = null;
+
+      const statsRes = await authFetch('/api/admin/businesses/stats');
+      if (statsRes && statsRes.ok) {
+        const statsData = await statsRes.json();
+        stats = statsData.data || {};
+      }
+
+      if (!stats) {
+        const fallbackRes = await authFetch('/api/admin/businesses');
+        if (!fallbackRes || !fallbackRes.ok) return;
+
+        const fallbackData = await fallbackRes.json();
+        const items = fallbackData.data || [];
+        stats = {
+          total_businesses: fallbackData.meta?.total || items.length,
+          recent_businesses: items.slice(0, 5)
+        };
+      }
+
+      const total = document.getElementById('dashboard-total');
+      total.textContent = formatNumber(stats.total_businesses || 0);
+
+      const categoriesEl = document.getElementById('dashboard-top-categories');
+      if (categoriesEl) {
+        categoriesEl.innerHTML = (stats.top_categories || [])
+          .map((item) => `<li class="list-group-item d-flex justify-content-between align-items-center"><span>${item.name}</span><strong>${formatNumber(item.total)}</strong></li>`)
+          .join('') || '<li class="list-group-item text-muted">No data</li>';
+      }
+
+      const citiesEl = document.getElementById('dashboard-top-cities');
+      if (citiesEl) {
+        citiesEl.innerHTML = (stats.top_cities || [])
+          .map((item) => `<li class="list-group-item d-flex justify-content-between align-items-center"><span>${item.name}</span><strong>${formatNumber(item.total)}</strong></li>`)
+          .join('') || '<li class="list-group-item text-muted">No data</li>';
+      }
+
+      const recentEl = document.getElementById('dashboard-recent-businesses');
+      if (recentEl) {
+        recentEl.innerHTML = (stats.recent_businesses || [])
+          .map((b) => `
+            <tr>
+              <td>${b.id}</td>
+              <td>${b.name}</td>
+              <td>${b.category || '-'}</td>
+              <td>${b.city || '-'}</td>
+            </tr>
+          `)
+          .join('') || '<tr><td colspan="4" class="text-muted">No data</td></tr>';
+      }
+
+      const legacyListEl = document.getElementById('dashboard-businesses');
+      if (legacyListEl) {
+        legacyListEl.innerHTML = (stats.recent_businesses || [])
+          .map((b) => `<li class="list-group-item">${b.name}</li>`)
+          .join('') || '<li class="list-group-item text-muted">No data</li>';
+      }
+    }
+
+    async function loadBusinessesFilters() {
+      if (businessesFiltersCache) return businessesFiltersCache;
+
+      const [citiesRes, categoriesRes] = await Promise.all([
+        authFetch('/api/cities'),
+        authFetch('/api/admin/categories')
+      ]);
+
+      const [citiesData, categoriesData] = await Promise.all([
+        citiesRes?.ok ? citiesRes.json() : Promise.resolve({ data: [] }),
+        categoriesRes?.ok ? categoriesRes.json() : Promise.resolve({ data: [] })
+      ]);
+
+      businessesFiltersCache = {
+        cities: citiesData.data || [],
+        categories: categoriesData.data || []
+      };
+
+      return businessesFiltersCache;
+    }
+
+    function invalidateBusinessesFiltersCache() {
+      businessesFiltersCache = null;
+    }
+
+    function applySelectOptions(selectEl, items, currentValue, emptyLabel) {
+      if (!selectEl) return;
+      selectEl.innerHTML = `<option value="">${emptyLabel}</option>` + items
+        .map((item) => `<option value="${item.id}">${item.name}</option>`)
+        .join('');
+      selectEl.value = currentValue || '';
+    }
+
+    async function renderBusinesses(routeParams) {
+      const q = routeParams.get('q') || '';
+      const page = Math.max(parseInt(routeParams.get('page') || '1', 10), 1);
+      const cityId = routeParams.get('city_id') || '';
+      const categoryId = routeParams.get('category_id') || '';
+
+      const tbody = document.getElementById('businesses-tbody');
+      const searchEl = document.getElementById('business-search');
+      const cityEl = document.getElementById('business-city-filter');
+      const categoryEl = document.getElementById('business-category-filter');
+      const prevBtn = document.getElementById('businesses-prev');
+      const nextBtn = document.getElementById('businesses-next');
+      const pageInfo = document.getElementById('businesses-page-info');
+
+      setTableMessage(tbody, 8, 'Loading...');
+
+      const filters = await loadBusinessesFilters();
+      applySelectOptions(cityEl, filters.cities, cityId, 'Todas las ciudades');
+      applySelectOptions(categoryEl, filters.categories, categoryId, 'Todas las categorías');
+      if (searchEl) searchEl.value = q;
+
+      const query = new URLSearchParams();
+      query.set('page', String(page));
+      query.set('limit', '20');
+      if (q) query.set('q', q);
+      if (cityId) query.set('city_id', cityId);
+      if (categoryId) query.set('category_id', categoryId);
+
+      const res = await authFetch(`/api/admin/businesses?${query.toString()}`);
+      if (!res) return;
+      if (!res.ok) return setTableMessage(tbody, 8, 'Error loading businesses', 'danger');
+
+      const data = await res.json();
+      const rows = data.data || [];
+      const meta = data.meta || { page: 1, total_pages: 1, total: rows.length };
+
+      tbody.innerHTML = '';
+      if (!rows.length) setTableMessage(tbody, 8, 'No businesses found');
+
+      rows.forEach((b) => {
+        const tr = document.createElement('tr');
+        tr.className = 'align-middle';
+        tr.innerHTML = `
+          <td>${b.name}</td>
+          <td>${b.city || '-'}</td>
+          <td>${b.category || '-'}</td>
+          <td>${b.phone || '-'}</td>
+          <td>${b.email || '-'}</td>
+          <td>${b.website ? `<a href="${b.website}" target="_blank" rel="noopener noreferrer">Abrir</a>` : '-'}</td>
+          <td class="text-end">
+            <a href="/admin/layout.html#business-edit?id=${b.id}" class="btn btn-sm btn-primary me-1">Editar</a>
+            <button class="btn btn-sm btn-danger business-delete-btn" data-id="${b.id}">Eliminar</button>
+          </td>
+        `;
+        tr.addEventListener('click', (event) => {
+          if (event.target.closest('button') || event.target.closest('a')) return;
+          updateRoute('business-edit', { id: b.id });
+        });
+        tbody.appendChild(tr);
+      });
+
+      tbody.querySelectorAll('.business-delete-btn').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          await deleteBusinessById(btn.dataset.id);
+        });
+      });
+
+      if (pageInfo) {
+        pageInfo.textContent = `Página ${meta.page} de ${meta.total_pages} · ${formatNumber(meta.total)} resultados`;
+      }
+      if (prevBtn) prevBtn.disabled = meta.page <= 1;
+      if (nextBtn) nextBtn.disabled = meta.page >= meta.total_pages;
+
+      if (searchEl && !searchEl.dataset.bound) {
+        searchEl.dataset.bound = '1';
+        searchEl.addEventListener('input', () => {
+          clearTimeout(businessesDebounce);
+          businessesDebounce = setTimeout(() => {
+            updateRoute('businesses', {
+              page: 1,
+              q: searchEl.value.trim(),
+              city_id: cityEl?.value || '',
+              category_id: categoryEl?.value || ''
+            });
+          }, 300);
+        });
+      }
+
+      if (cityEl && !cityEl.dataset.bound) {
+        cityEl.dataset.bound = '1';
+        cityEl.addEventListener('change', () => {
+          updateRoute('businesses', {
+            page: 1,
+            q: searchEl?.value.trim() || '',
+            city_id: cityEl.value,
+            category_id: categoryEl?.value || ''
+          });
+        });
+      }
+
+      if (categoryEl && !categoryEl.dataset.bound) {
+        categoryEl.dataset.bound = '1';
+        categoryEl.addEventListener('change', () => {
+          updateRoute('businesses', {
+            page: 1,
+            q: searchEl?.value.trim() || '',
+            city_id: cityEl?.value || '',
+            category_id: categoryEl.value
+          });
+        });
+      }
+
+      if (prevBtn && !prevBtn.dataset.bound) {
+        prevBtn.dataset.bound = '1';
+        prevBtn.addEventListener('click', () => {
+          if (meta.page > 1) {
+            updateRoute('businesses', {
+              page: meta.page - 1,
+              q: searchEl?.value.trim() || '',
+              city_id: cityEl?.value || '',
+              category_id: categoryEl?.value || ''
+            });
+          }
+        });
+      }
+
+      if (nextBtn && !nextBtn.dataset.bound) {
+        nextBtn.dataset.bound = '1';
+        nextBtn.addEventListener('click', () => {
+          if (meta.page < meta.total_pages) {
+            updateRoute('businesses', {
+              page: meta.page + 1,
+              q: searchEl?.value.trim() || '',
+              city_id: cityEl?.value || '',
+              category_id: categoryEl?.value || ''
+            });
+          }
+        });
+      }
+    }
+
+    async function deleteBusinessById(id) {
+      if (!confirmAction('¿Eliminar este negocio? Esta acción no se puede deshacer.')) return;
+
+      const res = await authFetch(`/api/admin/businesses/${id}`, {
+        method: 'DELETE'
+      });
+      if (!res || !res.ok) {
+        showNotification('No se pudo eliminar el negocio.', 'danger');
+        return;
+      }
+
+      showNotification('Negocio eliminado correctamente.', 'success');
+      await loadFromRoute();
+    }
+
+    async function renderBusinessForm(mode, routeParams) {
+      const id = routeParams.get('id');
+      const feedbackEl = document.getElementById('business-form-feedback');
+      const form = document.getElementById('business-form');
+      const submitBtn = document.getElementById('business-form-submit');
+      const titleEl = document.getElementById('business-form-title');
+      const deleteBtn = document.getElementById('business-form-delete');
+      const nameEl = document.getElementById('bf-name');
+      const addressEl = document.getElementById('bf-address');
+      const phoneEl = document.getElementById('bf-phone');
+      const emailEl = document.getElementById('bf-email');
+      const websiteEl = document.getElementById('bf-website');
+      const cityEl = document.getElementById('bf-city-id');
+      const categoryEl = document.getElementById('bf-category-id');
+      const sourceEl = document.getElementById('bf-source');
+      const claimedEl = document.getElementById('bf-claimed');
+      const latitudeEl = document.getElementById('bf-latitude');
+      const longitudeEl = document.getElementById('bf-longitude');
+
+      if (!feedbackEl || !form || !submitBtn) return;
+      titleEl.textContent = mode === 'create' ? 'Nuevo negocio' : 'Editar negocio';
+      deleteBtn.classList.toggle('d-none', mode === 'create');
+      submitBtn.textContent = mode === 'create' ? 'Crear negocio' : 'Guardar cambios';
+
+      if (mode === 'edit' && !id) {
+        feedbackEl.innerHTML = '<div class="alert alert-danger">ID inválido para edición.</div>';
+        form.classList.add('d-none');
+        return;
+      }
+
+      feedbackEl.innerHTML = '<div class="text-muted">Loading...</div>';
+      form.classList.remove('d-none');
+
+      const filters = await loadBusinessesFilters();
+      let b = {};
+      if (mode === 'edit') {
+        const businessRes = await authFetch(`/api/admin/businesses/${id}`);
+        if (!businessRes || !businessRes.ok) {
+          feedbackEl.innerHTML = '<div class="alert alert-danger">No se pudo cargar el negocio.</div>';
+          form.classList.add('d-none');
+          return;
+        }
+
+        const businessJson = await businessRes.json();
+        b = businessJson.data || {};
+      }
+
+      applySelectOptions(cityEl, filters.cities, b.city_id, 'Sin ciudad');
+      applySelectOptions(categoryEl, filters.categories, b.category_id, 'Sin categoría');
+
+      nameEl.value = b.name || '';
+      addressEl.value = b.address || '';
+      phoneEl.value = b.phone || '';
+      emailEl.value = b.email || '';
+      websiteEl.value = b.website || '';
+      sourceEl.value = b.source || 'manual';
+      claimedEl.checked = !!b.claimed;
+      latitudeEl.value = b.latitude ?? '';
+      longitudeEl.value = b.longitude ?? '';
+      feedbackEl.innerHTML = '';
+
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        submitBtn.disabled = true;
+        feedbackEl.innerHTML = '<div class="text-muted">Guardando...</div>';
+
+        const rawPayload = {
+          name: nameEl.value,
+          address: addressEl.value,
+          phone: phoneEl.value,
+          email: emailEl.value,
+          website: websiteEl.value,
+          city_id: cityEl.value,
+          category_id: categoryEl.value,
+          source: sourceEl.value,
+          claimed: claimedEl.checked,
+          latitude: latitudeEl.value,
+          longitude: longitudeEl.value
+        };
+        const payload = window.BusinessForm.normalizeBusinessPayload(rawPayload);
+        const validationError = window.BusinessForm.validateBusinessForm(payload);
+        if (validationError) {
+          submitBtn.disabled = false;
+          feedbackEl.innerHTML = `<div class="alert alert-danger">${validationError}</div>`;
+          return;
+        }
+
+        const isCreate = mode === 'create';
+        const endpoint = isCreate ? '/api/admin/businesses' : `/api/admin/businesses/${id}`;
+        const method = isCreate ? 'POST' : 'PUT';
+
+        const saveRes = await authFetch(endpoint, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        submitBtn.disabled = false;
+        if (!saveRes || !saveRes.ok) {
+          feedbackEl.innerHTML = '<div class="alert alert-danger">Error al guardar cambios.</div>';
+          showNotification('No se pudo guardar el negocio.', 'danger');
+          return;
+        }
+
+        showNotification(isCreate ? 'Negocio creado correctamente.' : 'Negocio actualizado correctamente.', 'success');
+        updateRoute('businesses', { page: 1 });
+      };
+
+      deleteBtn.onclick = async () => {
+        if (mode !== 'edit') return;
+        await deleteBusinessById(id);
+      };
+    }
+
+    async function renderBusinessCreate(routeParams) {
+      await renderBusinessForm('create', routeParams);
+    }
+
+    async function renderBusinessEdit(routeParams) {
+      await renderBusinessForm('edit', routeParams);
+    }
+
+    function getClaimStatusBadge(status) {
+      const normalized = (status || '').toLowerCase();
+      if (normalized === 'approved') return '<span class="badge bg-success">approved</span>';
+      if (normalized === 'rejected') return '<span class="badge bg-danger">rejected</span>';
+      return '<span class="badge bg-warning text-dark">pending</span>';
+    }
+
+    async function updateClaimStatus(id, status) {
+      const actionLabel = status === 'approved' ? 'aprobar' : 'rechazar';
+      if (!confirmAction(`¿Deseas ${actionLabel} este claim?`)) return;
+
+      const res = await authFetch(`/api/admin/claims/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (!res || !res.ok) {
+        showNotification('No se pudo actualizar el claim.', 'danger');
+        return;
+      }
+      showNotification(`Claim ${status === 'approved' ? 'aprobado' : 'rechazado'}.`, 'success');
+      await renderClaims();
+    }
+
+    async function renderClaims() {
+      const res = await authFetch('/api/admin/claims');
+      if (!res) return;
+      const tbody = document.getElementById('claims-tbody');
+      if (!tbody) return;
+
+      if (!res.ok) return setTableMessage(tbody, 6, 'Error loading claims', 'danger');
+
+      const data = await res.json();
+      const claims = data.data || [];
+
+      if (!claims.length) return setTableMessage(tbody, 6, 'No data');
+
+      tbody.innerHTML = claims.map((c) => `
+        <tr>
+          <td>${c.id}</td>
+          <td>${c.business_name || '-'}</td>
+          <td>${c.full_name || '-'}</td>
+          <td>${c.email || '-'}</td>
+          <td>${getClaimStatusBadge(c.status)}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-success me-1 claim-action-btn"
+              data-id="${c.id}" data-status="approved"
+              ${c.status === 'approved' ? 'disabled' : ''}>Approve</button>
+            <button class="btn btn-sm btn-danger claim-action-btn"
+              data-id="${c.id}" data-status="rejected"
+              ${c.status === 'rejected' ? 'disabled' : ''}>Reject</button>
+          </td>
+        </tr>
+      `).join('');
+
+      tbody.querySelectorAll('.claim-action-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          await updateClaimStatus(btn.dataset.id, btn.dataset.status);
+          btn.disabled = false;
+        });
+      });
+    }
+
+    async function renderCategories() {
+      const tbody = document.getElementById('categories-tbody');
+      const formWrap = document.getElementById('category-form-wrap');
+      const idEl = document.getElementById('category-id');
+      const nameEl = document.getElementById('category-name');
+      const slugEl = document.getElementById('category-slug');
+      const createBtn = document.getElementById('category-create-btn');
+      const saveBtn = document.getElementById('category-save-btn');
+      const cancelBtn = document.getElementById('category-cancel-btn');
+
+      if (!tbody) return;
+      setTableMessage(tbody, 3, 'Loading...');
+
+      const res = await authFetch('/api/categories');
+      if (!res || !res.ok) return setTableMessage(tbody, 3, 'Error loading categories', 'danger');
+
+      const data = await res.json();
+      const rows = data.data || [];
+      if (!rows.length) {
+        setTableMessage(tbody, 3, 'No categories found');
+      } else {
+        tbody.innerHTML = rows.map((c) => `
+          <tr>
+            <td>${c.name}</td>
+            <td>${c.slug || '-'}</td>
+            <td class="text-end">
+              <button class="btn btn-sm btn-primary me-1 category-edit-btn"
+                data-id="${c.id}" data-name="${c.name}" data-slug="${c.slug || ''}">Editar</button>
+              <button class="btn btn-sm btn-danger category-delete-btn"
+                data-id="${c.id}" data-name="${c.name}">Eliminar</button>
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      const openForm = (category = null) => {
+        formWrap.classList.remove('d-none');
+        idEl.value = category?.id || '';
+        nameEl.value = category?.name || '';
+        slugEl.value = category?.slug || '';
+      };
+      const closeForm = () => {
+        formWrap.classList.add('d-none');
+        idEl.value = '';
+        nameEl.value = '';
+        slugEl.value = '';
+      };
+
+      createBtn.onclick = () => openForm();
+      cancelBtn.onclick = () => closeForm();
+      saveBtn.onclick = async () => {
+        const name = nameEl.value.trim();
+        if (!name) {
+          showNotification('El nombre es requerido.', 'danger');
+          return;
+        }
+
+        const id = idEl.value;
+        const endpoint = id ? `/api/admin/categories/${id}` : '/api/admin/categories';
+        const method = id ? 'PUT' : 'POST';
+        const saveRes = await authFetch(endpoint, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, slug: slugEl.value.trim() || null })
+        });
+        if (!saveRes || !saveRes.ok) {
+          showNotification('No se pudo guardar la categoría.', 'danger');
+          return;
+        }
+
+        showNotification('Categoría guardada correctamente.', 'success');
+        invalidateBusinessesFiltersCache();
+        await renderCategories();
+        closeForm();
+      };
+
+      tbody.querySelectorAll('.category-edit-btn').forEach((btn) => {
+        btn.onclick = () => openForm({
+          id: btn.dataset.id,
+          name: btn.dataset.name,
+          slug: btn.dataset.slug
+        });
+      });
+
+      tbody.querySelectorAll('.category-delete-btn').forEach((btn) => {
+        btn.onclick = async () => {
+          if (!confirmAction(`¿Eliminar categoría "${btn.dataset.name}"?`)) return;
+
+          const delRes = await authFetch(`/api/admin/categories/${btn.dataset.id}`, {
+            method: 'DELETE'
+          });
+          if (!delRes || !delRes.ok) {
+            showNotification('No se pudo eliminar la categoría.', 'danger');
+            return;
+          }
+
+          showNotification('Categoría eliminada correctamente.', 'success');
+          invalidateBusinessesFiltersCache();
+          await renderCategories();
+        };
+      });
+    }
+
+    const pageRenderers = {
+      dashboard: renderDashboard,
+      businesses: renderBusinesses,
+      'business-create': renderBusinessCreate,
+      'business-edit': renderBusinessEdit,
+      categories: renderCategories,
+      claims: renderClaims
+    };
+
+    function handleNav(page, event, linkEl) {
+      if (event) event.preventDefault();
+      if (page === 'businesses') {
+        const remembered = routeStateMemory.get('businesses');
+        updateRoute(page, remembered || { page: 1 });
+      } else {
+        updateRoute(page, {});
+      }
+      return false;
+    }
+
+    async function loadPage(page, linkEl, routeParams = new URLSearchParams()) {
+      const pageFile = (page === 'business-edit' || page === 'business-create')
+        ? 'business-form-view'
+        : page;
+      const res = await fetch(`/admin/${pageFile}.html`);
+      if (!res.ok) {
+        document.getElementById('content').innerHTML = '<div class="alert alert-danger">No se pudo cargar la página.</div>';
+        return;
+      }
+
+      const html = await res.text();
+      document.getElementById('content').innerHTML = html;
+      document.getElementById('page-title').textContent = getPageTitle(page);
+      setActiveLink(page);
+      if (linkEl) linkEl.blur();
+
+      const renderer = pageRenderers[page];
+      if (renderer) await renderer(routeParams);
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      window.location.href = '/admin/login.html';
+    }
+
+    async function loadFromRoute() {
+      const { page, params } = parseHashRoute();
+      const safePage = pageRenderers[page] ? page : 'dashboard';
+      if (safePage === 'businesses') {
+        routeStateMemory.set('businesses', Object.fromEntries(params.entries()));
+      }
+      await loadPage(safePage, null, params);
+    }
+
+    async function initLayout() {
+      try {
+        const user = await requireSession();
+        if (!user) return;
+        await loadFromRoute();
+      } catch (err) {
+        console.error('Layout init error:', err);
+        document.getElementById('content').innerHTML = '<div class="alert alert-danger">Error cargando panel. Vuelve a iniciar sesión.</div>';
+      }
+    }
+
+    window.addEventListener('hashchange', () => {
+      loadFromRoute().catch((err) => {
+        console.error('Hash navigation error:', err);
+      });
+    });
+
+    window.addEventListener('popstate', () => {
+      loadFromRoute().catch((err) => {
+        console.error('Popstate navigation error:', err);
+      });
+    });
+
+    initLayout();
+  </script>
 </body>
 </html>
