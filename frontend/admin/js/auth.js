@@ -2,13 +2,18 @@ function getToken() {
   return localStorage.getItem('token');
 }
 
-async function authFetch(url, options = {}) {
+function authHeaders(extraHeaders = {}) {
   const token = getToken();
+  return token
+    ? {
+      ...extraHeaders,
+      Authorization: `Bearer ${token}`
+    }
+    : { ...extraHeaders };
+}
 
-  const headers = {
-    ...(options.headers || {}),
-    'Authorization': `Bearer ${token}`
-  };
+async function authFetch(url, options = {}) {
+  const headers = authHeaders(options.headers || {});
 
   const res = await fetch(url, {
     ...options,
@@ -23,4 +28,21 @@ async function authFetch(url, options = {}) {
   }
 
   return res;
+}
+
+async function requireSession() {
+  const res = await authFetch('/api/auth/me');
+  if (!res) return null;
+
+  if (!res.ok) {
+    if (res.status === 403) {
+      localStorage.removeItem('token');
+      window.location.href = '/admin/login.html';
+      return null;
+    }
+    throw new Error('Failed to validate session');
+  }
+
+  const json = await res.json();
+  return json.data || null;
 }

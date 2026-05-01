@@ -103,6 +103,70 @@ async function getAdminBusinesses(req, res) {
     res.status(500).json({ success: false });
   }
 }
+
+// =====================
+// DASHBOARD STATS
+// =====================
+async function getAdminDashboardStats(req, res) {
+  try {
+    const [totalBusinesses, topCategories, topCities, recentBusinesses] = await Promise.all([
+      pool.query(`
+        SELECT COUNT(*)::int AS total
+        FROM businesses b
+        WHERE b.is_active = true
+      `),
+      pool.query(`
+        SELECT
+          cat.id,
+          COALESCE(cat.name, 'Sin categoría') AS name,
+          COUNT(*)::int AS total
+        FROM businesses b
+        LEFT JOIN categories cat ON cat.id = b.category_id
+        WHERE b.is_active = true
+        GROUP BY cat.id, cat.name
+        ORDER BY total DESC, name ASC
+        LIMIT 5
+      `),
+      pool.query(`
+        SELECT
+          COALESCE(c.name, 'Sin ciudad') AS name,
+          COUNT(*)::int AS total
+        FROM businesses b
+        LEFT JOIN cities c ON c.id = b.city_id
+        WHERE b.is_active = true
+        GROUP BY c.name
+        ORDER BY total DESC, name ASC
+        LIMIT 5
+      `),
+      pool.query(`
+        SELECT
+          b.id,
+          b.name,
+          COALESCE(cat.name, '-') AS category,
+          COALESCE(c.name, '-') AS city
+        FROM businesses b
+        LEFT JOIN categories cat ON cat.id = b.category_id
+        LEFT JOIN cities c ON c.id = b.city_id
+        WHERE b.is_active = true
+        ORDER BY b.id DESC
+        LIMIT 5
+      `)
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        total_businesses: totalBusinesses.rows[0]?.total || 0,
+        top_categories: topCategories.rows,
+        top_cities: topCities.rows,
+        recent_businesses: recentBusinesses.rows
+      }
+    });
+  } catch (err) {
+    console.error('GET /api/admin/businesses/stats error:', err);
+    return res.status(500).json({ success: false });
+  }
+}
 // =====================
 // GET BY ID
 // =====================
@@ -152,7 +216,9 @@ async function updateBusiness(req, res) {
       claimed,
       is_active,
       source,
-      ruc
+      ruc,
+      latitude,
+      longitude
     } = req.body;
 
     const result = await pool.query(
@@ -170,6 +236,8 @@ async function updateBusiness(req, res) {
         is_active = COALESCE($10, is_active),
         source = COALESCE($11, source),
         ruc = COALESCE($12, ruc),
+        latitude = COALESCE($13, latitude),
+        longitude = COALESCE($14, longitude),
         updated_at = NOW()
       WHERE id = $1
       RETURNING *
@@ -186,7 +254,9 @@ async function updateBusiness(req, res) {
         claimed ?? null,
         is_active ?? null,
         source ?? null,
-        ruc ?? null
+        ruc ?? null,
+        latitude ?? null,
+        longitude ?? null
       ]
     );
 
@@ -217,7 +287,9 @@ async function createAdminBusiness(req, res) {
       source,
       claimed,
       is_active,
-      ruc
+      ruc,
+      latitude,
+      longitude
     } = req.body;
 
     const result = await pool.query(
@@ -225,12 +297,14 @@ async function createAdminBusiness(req, res) {
       INSERT INTO businesses
       (
         name, address, phone, email, website,
-        city_id, category_id, source, claimed, is_active, ruc
+        city_id, category_id, source, claimed, is_active, ruc,
+        latitude, longitude
       )
       VALUES
       (
         $1,$2,$3,$4,$5,
-        $6,$7,COALESCE($8,'manual'),COALESCE($9,false),COALESCE($10,true),$11
+        $6,$7,COALESCE($8,'manual'),COALESCE($9,false),COALESCE($10,true),$11,
+        $12,$13
       )
       RETURNING *
       `,
@@ -245,7 +319,9 @@ async function createAdminBusiness(req, res) {
         source || 'manual',
         claimed ?? false,
         is_active ?? true,
-        ruc || null
+        ruc || null,
+        latitude ?? null,
+        longitude ?? null
       ]
     );
 
@@ -266,9 +342,38 @@ async function createAdminBusiness(req, res) {
   }
 }
 
+async function deleteBusiness(req, res) {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Invalid business id' });
+    }
+
+    const result = await pool.query(
+      `
+      DELETE FROM businesses
+      WHERE id = $1
+      RETURNING id
+      `,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Business not found' });
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /api/admin/businesses/:id error:', err);
+    return res.status(500).json({ success: false });
+  }
+}
+
 module.exports = {
   getAdminBusinesses,
+  getAdminDashboardStats,
   getAdminBusinessById,
   updateBusiness,
-  createAdminBusiness
+  createAdminBusiness,
+  deleteBusiness
 };

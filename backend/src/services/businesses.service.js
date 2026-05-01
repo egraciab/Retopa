@@ -29,6 +29,7 @@ async function getBusinesses({ page, limit, cityId, categoryId, q }) {
     SELECT
       b.id,
       b.name,
+      b.ruc,
       b.slug,
       b.address,
       b.phone,
@@ -91,6 +92,7 @@ async function createBusiness(data) {
     website,
     city_id,
     category_id,
+    ruc,
     source,
     claimed,
     latitude,
@@ -105,14 +107,14 @@ async function createBusiness(data) {
       INSERT INTO businesses
       (
         name, address, phone, email, website,
-        city_id, category_id, source, claimed,
+        city_id, category_id, ruc, source, claimed,
         latitude, longitude
       )
       VALUES
       (
         $1,$2,$3,$4,$5,
-        $6,$7,COALESCE($8,'manual'),COALESCE($9,false),
-        $10,$11
+        $6,$7,$8,COALESCE($9,'manual'),COALESCE($10,false),
+        $11,$12
       )
       RETURNING id, name, latitude, longitude
     ),
@@ -143,6 +145,7 @@ async function createBusiness(data) {
     website || null,
     city_id || null,
     category_id || null,
+    ruc || null,
     source || 'manual',
     claimed ?? false,
     lat,
