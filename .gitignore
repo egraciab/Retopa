@@ -16,3 +16,8 @@ backups/
 
 # OS
 .DS_Store
+
+.env.respaldo-*
+*.bak-*
+*.bak
+
