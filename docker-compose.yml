@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgis/postgis:16-3.4
+    image: retopa-pg:16-vec-gis
     container_name: retopa-db
     restart: unless-stopped
     env_file:
@@ -9,6 +9,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - retopa_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -49,6 +51,10 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: ${REDIS_PORT}
+      UPLOADS_DIR: /uploads/images
+      JWT_SECRET: ${JWT_SECRET}
+    volumes:
+      - retopa_uploads:/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,6 +72,11 @@ services:
     environment:
       PORT: ${FRONTEND_PORT}
       NEXT_PUBLIC_API_URL: /api
+      SITE_URL: ${SITE_URL:-https://retopa.com.py}
+      SITE_NAME: ${SITE_NAME:-RetoPA}
+      SITE_DESC: ${SITE_DESC:-Directorio de empresas y profesionales de Paraguay}
+      BACKEND_HOST: retopa-backend
+      BACKEND_PORT: 3000
     depends_on:
       - backend
     networks:
@@ -82,12 +93,14 @@ services:
       - "80:80"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - retopa_uploads:/uploads:ro
     networks:
       - retopa_net
 
 volumes:
   retopa_postgres_data:
   retopa_redis_data:
+  retopa_uploads:
 
 networks:
   retopa_net:

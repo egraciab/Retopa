@@ -21,3 +21,6 @@ backups/
 *.bak-*
 *.bak
 
+
+# Datasets de importación: viven en el NAS, no en el repo
+scripts/*.json
