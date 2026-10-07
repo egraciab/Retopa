@@ -1,37 +1,1217 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Retopa</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      background: #0b1020;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta charset="UTF-8">    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetoPA — Directorio Comercial de Paraguay</title>
+    <!-- Google Search Console -->
+    <meta name="google-site-verification" content="FFwNJvSBBALDWQpUO8c4q8nVtlHS58xDBrj0nMSx1t0">
+    <!-- PWA v2.6 -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/api/v2/pwa-icon-180.png">
+    <meta name="theme-color" content="#1B3A6B">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="RetoPA">
+    <link rel="stylesheet" href="/public/css/main.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        // Evitar que el browser restaure posición de scroll de la sesión anterior
+        if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+        window.addEventListener('load', () => window.scrollTo(0, 0));
+    </script>
+    <style>
+        * { scroll-behavior: smooth; }
+        .glass { background: rgba(255,255,255,0.95); backdrop-filter: blur(16px); }
+        .card-hover { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .card-hover:hover { transform: translateY(-6px); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15); }
+        .search-glow:focus { box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.2); }
+        .hero-mesh { 
+            background: 
+                radial-gradient(ellipse at 20% 50%, rgba(14,165,233,0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 20%, rgba(251,191,36,0.1) 0%, transparent 50%),
+                linear-gradient(180deg, #082f49 0%, #0c4a6e 50%, #075985 100%);
+        }
+        .pattern-dots { background-image: radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px); background-size: 24px 24px; }
+        .float-slow { animation: floatSlow 8s ease-in-out infinite; }
+        .float-slower { animation: floatSlow 10s ease-in-out infinite; animation-delay: 4s; }
+        @keyframes floatSlow { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-20px) rotate(2deg); } }
+        .fade-up { animation: fadeUp 0.7s ease-out forwards; opacity: 0; transform: translateY(30px); }
+        @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+        .stagger-1 { animation-delay: 0.1s; }
+        .stagger-2 { animation-delay: 0.25s; }
+        .stagger-3 { animation-delay: 0.4s; }
+        .category-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
+        .category-card:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.12); }
+        .category-card.active { background: #0ea5e9 !important; color: white !important; border-color: #0ea5e9 !important; }
+        .category-card.active .cat-icon { background: rgba(255,255,255,0.2) !important; color: white !important; }
+        .biz-card { border-left: 3px solid transparent; transition: all 0.35s; }
+        .biz-card:hover { border-left-color: #0ea5e9; }
+        .verified-pulse { animation: vPulse 2.5s ease-in-out infinite; }
+        .not-verified { opacity: 0.6; }
+        @keyframes vPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .btn-brand { background: linear-gradient(135deg, #0284c7, #0ea5e9); transition: all 0.3s; }
+        .btn-brand:hover { background: linear-gradient(135deg, #0369a1, #0284c7); transform: translateY(-2px); box-shadow: 0 12px 30px -5px rgba(2, 132, 199, 0.4); }
+        .btn-gold { background: linear-gradient(135deg, #f59e0b, #fbbf24); transition: all 0.3s; }
+        .btn-gold:hover { background: linear-gradient(135deg, #d97706, #f59e0b); transform: translateY(-2px); box-shadow: 0 12px 30px -5px rgba(245, 158, 11, 0.4); }
+        .plan-card { transition: all 0.4s; border: 2px solid transparent; }
+        .plan-card:hover { transform: translateY(-8px); border-color: #e0f2fe; }
+        .plan-ribbon-public {
+            position: absolute;
+            top: 18px;
+            right: -38px;
+            background: linear-gradient(135deg, #E8B84B, #d97706);
+            color: #fff;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: .5px;
+            text-transform: uppercase;
+            padding: 5px 44px;
+            transform: rotate(45deg);
+            box-shadow: 0 2px 8px rgba(0,0,0,.2);
+            z-index: 5;
+            pointer-events: none;
+        }
+        .plan-card.featured { border-color: #fbbf24; position: relative; }
+        .loading-skeleton { 
+            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); 
+            background-size: 200% 100%; animation: skeleton 1.5s infinite; 
+        }
+        @keyframes skeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .suggestion-item { transition: all 0.15s; }
+        .suggestion-item:hover { background: #f0f9ff; }
+        .plan-select { transition: all 0.2s; }
+        .plan-select:hover { transform: scale(1.02); }
+        .plan-select.selected { border-width: 3px; }
+        .filter-chip { 
+            animation: chipIn 0.3s ease-out; 
+            display: inline-flex; align-items: center; gap: 0.25rem;
+        }
+        @keyframes chipIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+        .map-container { height: 300px; border-radius: 1rem; overflow: hidden; }
+        .star-rating { cursor: pointer; transition: transform 0.1s; }
+        .star-rating:hover { transform: scale(1.2); }
+        .results-section { min-height: 200px; }
+        .image-upload-zone { 
+            border: 2px dashed #cbd5e1; border-radius: 1rem; 
+            padding: 2rem; text-align: center; cursor: pointer;
+            transition: all 0.3s;
+        }
+        .image-upload-zone:hover { border-color: #0ea5e9; background: #f0f9ff; }
+        .image-upload-zone.has-image { border-color: #22c55e; background: #f0fdf4; }
+        .preview-img { max-height: 200px; border-radius: 0.5rem; }
+
+        /* ── VIEW TOGGLE ────────────────────────────────── */
+        .view-toggle-btn { color: #94a3b8; }
+        .view-toggle-btn.active { background: white; color: #0ea5e9; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+
+        /* ── LISTA COMPACTA (modo búsqueda) ──────────────── */
+        .biz-list-row {
+            display: flex; align-items: center; gap: 14px;
+            background: white; border-radius: 14px; padding: 12px 16px;
+            border: 1px solid #f1f5f9; transition: all .15s; cursor: pointer;
+        }
+        .biz-list-row:hover { border-color: #bae6fd; box-shadow: 0 2px 8px rgba(14,165,233,.1); transform: translateY(-1px); }
+        .biz-list-logo { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; background: #f1f5f9; flex-shrink: 0; }
+        .biz-list-name { font-weight: 700; font-size: .9rem; color: #0f172a; line-height: 1.3; }
+        .biz-list-name mark { background: #fef3c7; color: #92400e; border-radius: 2px; padding: 0 2px; font-style: normal; }
+        .biz-list-meta { font-size: .73rem; color: #94a3b8; margin-top: 3px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .biz-list-meta i { width: 12px; text-align: center; color: #cbd5e1; }
+    
+    /* ── Carrusel de Promociones ──────────────────────────────────────── */
+    #homePromosViewport { overflow: hidden; border-radius: 16px; }
+    #homePromosTrack    { display: flex; gap: 16px; transition: transform 0.45s cubic-bezier(0.4,0,0.2,1); will-change: transform; align-items: stretch; }
+    .promo-card         { flex: none; display: flex; flex-direction: column; }
+
+    .promo-nav-btn {
+        position: absolute; top: 50%; transform: translateY(-50%);
+        width: 40px; height: 40px; border-radius: 50%;
+        background: white; border: 1.5px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        color: #1B3A6B; font-size: 14px; transition: all .2s; z-index: 10;
     }
-    .box {
-      max-width: 800px;
-      padding: 40px;
-      border-radius: 16px;
-      background: #121933;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    .promo-nav-btn:hover { background: #1B3A6B; color: white; border-color: #1B3A6B; }
+    .promo-nav-prev { left: -20px; }
+    .promo-nav-next { right: -20px; }
+    @media (max-width: 767px) { .promo-nav-btn { display: none; } }
+
+    .promo-dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        border: none; background: #e2e8f0; cursor: pointer;
+        transition: all .25s; padding: 0;
     }
-    h1 { margin-top: 0; }
-    a { color: #7CFFB2; }
-  </style>
+    .promo-dot.active { background: #1B3A6B; width: 24px; border-radius: 4px; }
+</style>
+<!-- ════ Rediseño mobile (opción A) — tokens de marca + componentes ════ -->
+<style id="rp-redesign">
+  :root{
+    --rp-navy:#1B3A6B; --rp-sky:#7EC8E3; --rp-gold:#E8B84B; --rp-gold-text:#C9951F;
+    --rp-ink:#0F1E36; --rp-ink-2:#52607A; --rp-bg:#F5F7FB; --rp-border:#E3E8F0;
+    --rp-wa:#0F7A43; --rp-bottomnav-h:70px;
+  }
+  /* Barra de navegación inferior (mobile) */
+  .rp-bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:80;height:var(--rp-bottomnav-h);
+    background:#fff;border-top:1px solid var(--rp-border);display:flex;
+    box-shadow:0 -2px 12px rgba(15,30,54,.06);padding-bottom:env(safe-area-inset-bottom)}
+  .rp-bottomnav a{flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:3px;text-decoration:none;color:#5E6B82;font-size:11px;font-weight:600;min-height:44px;-webkit-tap-highlight-color:transparent}
+  .rp-bottomnav a i{font-size:19px;line-height:1}
+  .rp-bottomnav a.active{color:var(--rp-navy)}
+  /* deja aire abajo para que la barra no tape el contenido/último botón */
+  body.rp-has-bottomnav{padding-bottom:calc(var(--rp-bottomnav-h) + env(safe-area-inset-bottom))}
+  @media(min-width:1024px){ .rp-bottomnav{display:none} body.rp-has-bottomnav{padding-bottom:0} }
+  /* Chips de rubro / filtros — scroll horizontal */
+  .rp-chip{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;padding:9px 14px;border-radius:999px;
+    border:1px solid var(--rp-border);background:#fff;color:var(--rp-ink);font-size:13px;font-weight:600;
+    text-decoration:none;min-height:40px;cursor:pointer}
+  .rp-chip:active{background:var(--rp-bg)}
+  .rp-chip-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;padding:2px 0}
+  .rp-chip-row::-webkit-scrollbar{display:none}
+  /* Hero navy fijo (diseno aprobado) — gana sobre override de site_config */
+  .rp-hero{background:#1B3A6B !important}
+  /* ETAPA 3 — Tarjeta compacta de resultados (mobile-first) */
+  .rp-card{display:flex;gap:12px;padding:12px;background:#fff;border:1px solid var(--rp-border);
+    border-radius:16px;cursor:pointer;align-items:flex-start;-webkit-tap-highlight-color:transparent}
+  .rp-card:active{background:var(--rp-bg)}
+  .rp-card-thumb{width:64px;height:64px;border-radius:12px;flex-shrink:0;overflow:hidden;position:relative;background:var(--rp-bg)}
+  .rp-card-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .rp-thumb-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:24px;color:#fff}
+  .rp-card-body{flex:1;min-width:0}
+  .rp-card-title{font-weight:800;color:var(--rp-ink);font-size:15px;line-height:1.25;
+    display:flex;align-items:center;gap:6px}
+  .rp-card-title .rp-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .rp-card-meta{color:var(--rp-ink-2);font-size:12.5px;margin-top:2px;line-height:1.35;
+    display:flex;align-items:center;flex-wrap:wrap;gap:2px 0}
+  .rp-card-status{font-size:12px;margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .rp-card-actions{display:flex;gap:8px;margin-top:10px}
+  .rp-act{flex:1;min-height:44px;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;
+    gap:6px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--rp-border);
+    background:#fff;color:var(--rp-ink);cursor:pointer;padding:0 6px}
+  .rp-act i{font-size:14px}
+  .rp-act-wa{background:var(--rp-wa);color:#fff;border-color:var(--rp-wa)}
+  .rp-act:active{opacity:.85}
+  @media(min-width:1024px){ .rp-card-thumb{width:88px;height:88px} .rp-card-title{font-size:17px} }
+  /* ETAPA 3 — Promos del home alineadas al estilo mobile (desktop intacto) */
+  @media(max-width:1023px){
+    .rp-homepromos{padding:22px 0 6px !important;background:#fff !important}
+    .rp-homepromos > div{padding:0 16px !important;max-width:100% !important}
+    .rp-homepromos .rp-hp-head{text-align:left !important;margin-bottom:14px !important}
+    .rp-homepromos .rp-hp-head h2{font-size:20px !important;margin:0 !important}
+    .rp-homepromos .rp-hp-pill{margin-bottom:8px !important}
+    .rp-homepromos .rp-hp-sub{display:none !important}
+  }
+  /* ETAPA 3.3b — Chips de filtro (sticky) + "Ver más" */
+  .rp-fchip{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;padding:8px 14px;border-radius:999px;
+    border:1px solid var(--rp-border);background:#fff;color:var(--rp-ink-2);font-size:13px;font-weight:600;
+    cursor:pointer;min-height:38px;-webkit-tap-highlight-color:transparent}
+  .rp-fchip.active{background:var(--rp-navy);color:#fff;border-color:var(--rp-navy)}
+  .rp-fchip.active i{color:#fff !important}
+  select.rp-fchip{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2352607A' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+  .rp-loadmore{width:100%;min-height:48px;border-radius:12px;border:1.5px solid var(--rp-navy);background:#fff;
+    color:var(--rp-navy);font-weight:800;font-size:15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+  .rp-loadmore:active{background:var(--rp-bg)}
+  /* ETAPA 4 — Ficha: barra de acciones FIJA al pie (mobile) */
+  .rp-ficha-actions{position:fixed;left:0;right:0;bottom:0;z-index:86;display:flex;gap:8px;
+    padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:#fff;
+    border-top:1px solid var(--rp-border);box-shadow:0 -2px 12px rgba(15,30,54,.08)}
+  .rp-fa{flex:1;min-height:48px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;
+    gap:7px;font-weight:800;font-size:14px;text-decoration:none;border:1px solid var(--rp-border);
+    background:#fff;color:var(--rp-ink);-webkit-tap-highlight-color:transparent}
+  .rp-fa i{font-size:15px}
+  .rp-fa-wa{background:var(--rp-wa);color:#fff;border-color:var(--rp-wa)}
+  .rp-fa:active{opacity:.85}
+  @media(min-width:1024px){ .rp-ficha-actions{display:none} }
+</style>
 </head>
-<body>
-  <div class="box">
-    <h1>Retopa</h1>
-    <p>Frontend online.</p>
-    <p><a href="/admin/login.html">Ir al panel admin</a></p>
-    <p><a href="/api/health">API health</a></p>
-  </div>
+<body class="font-sans bg-gray-50 text-gray-800 antialiased rp-has-bottomnav">
+
+    <!-- (Rediseño A) Barra superior "Paraguay / Soporte" eliminada — Soporte vive
+         en el menú y el footer. Botón flotante de WhatsApp eliminado — su rol lo
+         cubre la barra de navegación inferior. -->
+
+    <!-- NAVBAR -->
+    <nav id="navbar" class="sticky top-0 z-50 transition-all duration-300 border-b border-transparent bg-white/80 backdrop-blur-xl">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center" style="height:60px">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="window.scrollTo(0,0)">
+                    <!-- Logo RetoPA: lupa con pin, paleta #1B3A6B / #7EC8E3 / #E8B84B -->
+                    <div class="brand-logo-container w-10 h-10 rounded-xl flex items-center justify-center shadow-lg" style="background:linear-gradient(135deg,#1B3A6B,#2a5298)">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="10" cy="10" r="6" stroke="#7EC8E3" stroke-width="2.2"/>
+                            <line x1="14.8" y1="14.8" x2="20" y2="20" stroke="#7EC8E3" stroke-width="2.2" stroke-linecap="round"/>
+                            <circle cx="10" cy="10" r="2" fill="#E8B84B"/>
+                            <line x1="10" y1="12" x2="10" y2="15" stroke="#E8B84B" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-xl font-black tracking-tight leading-none" style="font-family:system-ui,-apple-system,sans-serif;color:#1B3A6B">Reto<span style="color:#C9951F">PA</span></div>
+                        <p class="text-[9px] font-semibold tracking-widest uppercase mt-0.5 brand-tagline" style="color:#7EC8E3;letter-spacing:0.12em">Encontrá lo que necesitás</p>
+                    </div>
+                </div>
+
+                <div class="hidden lg:flex items-center gap-1">
+                    <a href="#inicio" class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-brand-700 hover:bg-brand-50 transition">Inicio</a>
+                    <a href="#directorio" class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-brand-700 hover:bg-brand-50 transition">Búsqueda</a>
+                    <a href="/ofertas" class="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:text-brand-700 hover:bg-brand-50 transition inline-flex items-center gap-1.5"><i class="fas fa-tag text-brand-500"></i> Ofertas</a>
+                    <a href="#planes" class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-brand-700 hover:bg-brand-50 transition">Planes</a>
+                    <a href="#servicios" class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-brand-700 hover:bg-brand-50 transition">Servicios</a>
+                </div>
+
+                <div class="flex items-center gap-1" id="authButtons">
+                    <!-- Login: "Ingresar" como texto (≥44px de alto táctil) -->
+                    <button onclick="openLoginModal()" class="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-brand-600 transition px-3 rounded-lg hover:bg-gray-50" style="min-height:44px">
+                        <i class="fas fa-sign-in-alt"></i>
+                        <span>Ingresar</span>
+                    </button>
+                    <!-- Registrar: solo desktop; en mobile la acción vive en el bloque dorado y en la pestaña "Mi negocio" -->
+                    <button onclick="openRegistroEmpresaCheck()" class="hidden lg:flex btn-brand text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-brand-500/25 items-center gap-2">
+                        <i class="fas fa-plus"></i> <span>Registrar mi empresa</span>
+                    </button>
+                    <button class="lg:hidden text-gray-700 p-2 rounded-lg hover:bg-gray-100 transition" onclick="toggleMobileMenu()" aria-label="Menú" style="min-width:44px;min-height:44px">
+                        <i class="fas fa-bars text-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="mobileMenu" class="hidden lg:hidden glass border-t border-gray-100">
+            <div class="px-4 py-3 space-y-1">
+                <a href="#inicio" class="block px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-brand-50 hover:text-brand-700">Inicio</a>
+                <a href="#directorio" class="block px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-brand-50 hover:text-brand-700">Búsqueda</a>
+                <a href="/ofertas" class="block px-4 py-2 rounded-lg text-sm font-semibold text-gray-700 hover:bg-brand-50 hover:text-brand-700"><i class="fas fa-tag text-brand-500 mr-1.5"></i> Ofertas</a>
+                <a href="#planes" class="block px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-brand-50 hover:text-brand-700">Planes</a>
+                <a href="#servicios" class="block px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-brand-50 hover:text-brand-700">Servicios</a>
+                <a href="#" onclick="rpSoporte();return false" class="block px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-brand-50 hover:text-brand-700"><i class="fas fa-headset text-brand-500 mr-1.5"></i> Soporte</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- HERO (opción A · mobile-first) -->
+    <section id="inicio" class="rp-hero relative overflow-hidden">
+        <div class="relative max-w-3xl mx-auto px-4 pt-6 pb-7 lg:pt-12 lg:pb-12">
+            <!-- Contador (stat) -->
+            <div class="inline-flex items-center gap-2 text-white/85 text-sm font-medium mb-3">
+                <span class="relative flex h-2.5 w-2.5">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-400"></span>
+                </span>
+                <span id="heroStats">Cargando...</span>
+            </div>
+
+            <!-- H1 real de la página (diseño aprobado, no configurable) -->
+            <h1 id="heroTitle" class="text-white font-black font-display leading-tight mb-4" style="font-size:clamp(30px,8vw,44px)">¿Qué necesitás <span style="color:#E8B84B">hoy</span>?</h1>
+
+            <!-- Buscador (arriba del pliegue) -->
+            <div class="relative mb-2.5">
+                <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                <input type="text" id="mainSearch" autocomplete="off"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();performSearch();}"
+                    placeholder="Cerrajero, taller, nombre o RUC"
+                    class="w-full pl-12 pr-4 rounded-2xl border-0 bg-white text-gray-800 placeholder-gray-400 text-base font-medium focus:ring-2 focus:ring-brand-400 focus:outline-none"
+                    style="height:56px">
+                <div id="searchSuggestions" class="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-100 hidden z-50 overflow-hidden text-left"></div>
+            </div>
+
+            <!-- Combos ciudad/categoría: solo desktop (en mobile el rubro va por chips y la ciudad por texto) -->
+            <div class="hidden lg:flex gap-2 mb-2.5">
+                <div class="flex-1 relative" id="cityComboWrapper">
+                    <i class="fas fa-map-marker-alt absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 z-10 pointer-events-none"></i>
+                    <input type="text" id="cityComboInput" placeholder="Todas las ciudades" autocomplete="off"
+                        class="w-full pl-12 pr-8 py-3 rounded-xl border border-gray-200 bg-white text-gray-700 focus:ring-2 focus:ring-brand-500 transition text-sm font-medium"
+                        oninput="filterCombo('city')" onfocus="openCombo('city')" onblur="delayCloseCombo('city')">
+                    <input type="hidden" id="citySelect">
+                    <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs"></i>
+                    <div id="cityComboList" class="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-gray-100 hidden z-50 max-h-60 overflow-y-auto text-left"></div>
+                </div>
+                <div class="flex-1 relative" id="catComboWrapper">
+                    <i class="fas fa-tag absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 z-10 pointer-events-none"></i>
+                    <input type="text" id="catComboInput" placeholder="Todas las categorías" autocomplete="off"
+                        class="w-full pl-12 pr-8 py-3 rounded-xl border border-gray-200 bg-white text-gray-700 focus:ring-2 focus:ring-brand-500 transition text-sm font-medium"
+                        oninput="filterCombo('cat')" onfocus="openCombo('cat')" onblur="delayCloseCombo('cat')">
+                    <input type="hidden" id="categorySelect">
+                    <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs"></i>
+                    <div id="catComboList" class="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-gray-100 hidden z-50 max-h-60 overflow-y-auto text-left"></div>
+                </div>
+            </div>
+
+            <!-- Botones: Cerca de mí (lo estiliza distance.js) + Buscar -->
+            <div class="flex items-center gap-2">
+                <button id="nearMeBtn"></button>
+                <button id="nearMeClear" title="Quitar filtro de distancia"
+                    style="display:none;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.2);border:none;cursor:pointer;font-size:11px;color:#fff;padding:0;flex-shrink:0;">✕</button>
+                <button onclick="performSearch()" class="flex-1 rounded-2xl font-bold text-base inline-flex items-center justify-center gap-2" style="height:52px;background:#E8B84B;color:#0F1E36">
+                    <i class="fas fa-search"></i> Buscar
+                </button>
+            </div>
+
+            <!-- Elementos funcionales conservados (ocultos en mobile) -->
+            <div class="hidden lg:block mt-3">
+                <button id="locationPill" type="button" aria-label="Activar ubicación"></button>
+            </div>
+            <div id="popularTags" class="hidden"></div>
+            <div id="activeFilters" class="hidden px-1 pb-2 pt-2 flex-wrap items-center gap-2">
+                <span class="text-xs text-white/70 font-medium uppercase tracking-wider">Filtros:</span>
+                <button onclick="clearAllFilters()" class="text-xs bg-white/15 text-white hover:bg-white/25 px-3 py-1.5 rounded-md font-bold transition inline-flex items-center gap-1 ml-auto">
+                    <i class="fas fa-times"></i> Limpiar todo
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- BUSCÁ POR RUBRO (chips) -->
+    <section class="max-w-3xl mx-auto px-4 pt-5">
+        <h2 class="text-lg font-black mb-3" style="color:#0F1E36">Busc&aacute; por rubro</h2>
+        <div class="grid grid-cols-2 gap-2.5">
+            <button class="rp-chip" style="width:100%;justify-content:flex-start" onclick="rpRubro('Cerrajería')"><i class="fas fa-key" style="color:#C9951F"></i> Cerrajer&iacute;a</button>
+            <button class="rp-chip" style="width:100%;justify-content:flex-start" onclick="rpRubro('Taller mecánico')"><i class="fas fa-screwdriver-wrench" style="color:#1B3A6B"></i> Taller mec&aacute;nico</button>
+            <button class="rp-chip" style="width:100%;justify-content:flex-start" onclick="rpRubro('Veterinaria')"><i class="fas fa-paw" style="color:#1B3A6B"></i> Veterinaria</button>
+            <button class="rp-chip" style="width:100%;justify-content:flex-start" onclick="rpRubro('Farmacia')"><i class="fas fa-pills" style="color:#1B3A6B"></i> Farmacia</button>
+            <button class="rp-chip" style="width:100%;justify-content:flex-start" onclick="rpRubro('Plomería')"><i class="fas fa-faucet" style="color:#1B3A6B"></i> Plomer&iacute;a</button>
+            <button class="rp-chip" style="width:100%;justify-content:flex-start" onclick="rpRubro('Electricista')"><i class="fas fa-bolt" style="color:#E8B84B"></i> Electricista</button>
+        </div>
+        <button onclick="rpOpenCatPicker()" class="rp-chip mt-2.5" style="width:100%;justify-content:center;border-style:dashed;color:#1B3A6B;font-weight:700"><i class="fas fa-layer-group" style="color:#1B3A6B"></i> Ver todas las categor&iacute;as</button>
+    </section>
+
+    <!-- ABIERTOS AHORA (el componente de tarjeta se completa en la etapa 3) -->
+    <section id="abiertosAhoraSection" class="hidden max-w-3xl mx-auto px-4 pt-7">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-black" style="color:#0F1E36">Abiertos ahora, cerca tuyo</h2>
+            <a href="#directorio" class="text-sm font-semibold" style="color:#0284c7">Ver todos</a>
+        </div>
+        <div id="abiertosAhora" class="space-y-3"></div>
+    </section>
+
+    <!-- 🔥 Sección Promociones Home -->
+    <div id="homePromos" class="hidden rp-homepromos" style="background:linear-gradient(160deg,#fff7ed 0%,#ffffff 100%);padding:48px 0 56px">
+        <div style="max-width:1100px;margin:0 auto;padding:0 20px">
+            <!-- Header -->
+            <div class="rp-hp-head" style="text-align:center;margin-bottom:32px">
+                <div class="rp-hp-pill" style="display:inline-flex;align-items:center;gap:10px;background:#fff;border:1.5px solid #fed7aa;border-radius:50px;padding:6px 18px;margin-bottom:16px">
+                    <span style="font-size:18px">🔥</span>
+                    <span style="font-size:12px;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:0.08em">Ofertas destacadas</span>
+                </div>
+                <h2 style="font-size:clamp(22px,4vw,34px);font-weight:900;color:#0f172a;margin:0 0 8px;line-height:1.2">
+                    Promociones que no te podés perder
+                </h2>
+                <p class="rp-hp-sub" style="font-size:14px;color:#64748b;margin:0">Ofertas exclusivas de negocios verificados en RetoPA</p>
+            </div>
+            <!-- Carrusel -->
+            <div style="position:relative">
+                <!-- Contenedor con overflow oculto -->
+                <div style="overflow:hidden;border-radius:20px" id="homePromosViewport">
+                    <div id="homePromosTrack" style="display:flex;transition:transform 0.45s cubic-bezier(0.4,0,0.2,1);will-change:transform"></div>
+                </div>
+                <!-- Botones prev/next (solo desktop) -->
+                <button class="promo-nav-btn promo-nav-prev" onclick="window._promoCarousel&&window._promoCarousel.prev()" aria-label="Anterior">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <button class="promo-nav-btn promo-nav-next" onclick="window._promoCarousel&&window._promoCarousel.next()" aria-label="Siguiente">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+            <!-- Dots -->
+            <div id="homePromosDots" style="display:none;justify-content:center;gap:6px;margin-top:20px"></div>
+        </div>
+    </div>
+
+    <!-- BLOQUE DORADO: ¿Tenés un negocio? -->
+    <section class="max-w-3xl mx-auto px-4 pt-7">
+        <div class="rounded-2xl p-5" style="background:#fff;border:1.5px solid #E8B84B">
+            <h2 class="text-xl font-black mb-1.5" style="color:#1B3A6B">&iquest;Ten&eacute;s un negocio?</h2>
+            <p class="text-sm mb-4" style="color:#52607A">Tu ficha es gratis. Que tus clientes te encuentren y te escriban directo por WhatsApp.</p>
+            <button onclick="openRegistroEmpresaCheck('basic')" class="w-full rounded-xl font-bold text-base inline-flex items-center justify-center" style="height:52px;background:#E8B84B;color:#0F1E36">Registrar mi negocio gratis</button>
+            <div class="text-center mt-3"><a href="#planes" class="text-sm font-bold" style="color:#0284c7">Ver planes</a></div>
+        </div>
+    </section>
+
+    <!-- CATEGORÍAS — título y grid ocultos en mobile -->
+
+    <section id="directorio" class="py-8 md:py-20 max-w-7xl mx-auto px-4">
+        <div class="hidden md:block text-center mb-12">
+            <span class="text-brand-600 font-bold text-sm uppercase tracking-widest">Explorá</span>
+            <h3 class="text-3xl md:text-4xl font-bold text-gray-900 mt-2 font-display">Categorías principales</h3>
+            <p class="text-gray-500 mt-3 text-lg">Navegá por sector y encontrá lo que necesitás</p>
+        </div>
+
+        <div class="hidden md:grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4" id="categoriesGrid">
+            <div class="col-span-full text-center py-12">
+                <div class="loading-skeleton w-16 h-16 rounded-2xl mx-auto mb-4"></div>
+                <div class="loading-skeleton w-32 h-4 rounded mx-auto"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- DIRECTORIO -->
+    <section class="py-8 max-w-7xl mx-auto px-4">
+        <div class="flex flex-col lg:flex-row gap-6">
+            <aside class="hidden lg:block lg:w-64 shrink-0">
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sticky top-24">
+                    <h4 class="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                        <i class="fas fa-sliders-h text-brand-500"></i> Filtros
+                    </h4>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Verificación</label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="filterVerified" class="w-4 h-4 text-brand-600 rounded border-gray-300 focus:ring-brand-500" onchange="applyFilters()">
+                                <span class="text-sm text-gray-700">Solo verificados</span>
+                                <i class="fas fa-check-circle text-green-500 text-xs ml-auto"></i>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Rating</label>
+                            <div class="space-y-1.5">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="rating" value="5" class="text-brand-600 focus:ring-brand-500" onchange="applyFilters()">
+                                    <div class="flex text-yellow-400 text-xs"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i></div>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="rating" value="4" class="text-brand-600 focus:ring-brand-500" onchange="applyFilters()">
+                                    <div class="flex text-yellow-400 text-xs"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="far fa-star"></i></div>
+                                    <span class="text-sm text-gray-600">4+</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Ciudad</label>
+                            <select id="filterCity" class="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-gray-50 focus:ring-2 focus:ring-brand-500" onchange="applyFilters()">
+                                <option value="">Todas</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <div class="flex-1">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h3 class="text-2xl font-bold text-gray-900 font-display" id="resultsTitle">Empresas destacadas</h3>
+                        <p class="text-gray-500 text-sm mt-1" id="resultsCount">Cargando...</p>
+                    </div>
+                    <div class="hidden lg:flex items-center gap-3">
+                        <!-- Toggle de vista: solo visible cuando hay búsqueda activa -->
+                        <div id="viewToggle" class="hidden items-center gap-1 bg-gray-100 p-1 rounded-xl">
+                            <button id="viewBtnList" onclick="setViewMode('list')"
+                                class="view-toggle-btn active w-8 h-8 rounded-lg flex items-center justify-center text-sm transition"
+                                title="Vista lista compacta">
+                                <i class="fas fa-list"></i>
+                            </button>
+                            <button id="viewBtnCards" onclick="setViewMode('cards')"
+                                class="view-toggle-btn w-8 h-8 rounded-lg flex items-center justify-center text-sm transition"
+                                title="Vista tarjetas">
+                                <i class="fas fa-th-large"></i>
+                            </button>
+                        </div>
+                        <span class="text-sm text-gray-500 font-medium">Ordenar por:</span>
+                        <select id="sortOrder" class="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-brand-500" onchange="applyFilters()">
+                            <option value="relevance">Relevancia</option>
+                            <option value="rating">Mejor valorados</option>
+                            <option value="recent">Más recientes</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- E3.3b — Barra de filtros sticky (mobile) -->
+                <div id="rpFilterBar" class="lg:hidden sticky bg-white py-2 mb-3" style="top:60px;z-index:30">
+                    <div class="rp-chip-row">
+                        <button id="rpChipNear" class="rp-fchip" onclick="rpToggleFilter('near')"><i class="fas fa-location-crosshairs"></i> Cerca de m&iacute;</button>
+                        <button id="rpChipVerified" class="rp-fchip" onclick="rpToggleFilter('verified')"><i class="fas fa-circle-check"></i> Verificados</button>
+                        <button id="rpChipRating" class="rp-fchip" onclick="rpToggleFilter('rating')"><i class="fas fa-star"></i> 4+</button>
+                        <select id="rpSortMobile" onchange="rpMobileSort(this.value)" class="rp-fchip" style="padding-right:26px">
+                            <option value="relevance">Relevancia</option>
+                            <option value="rating">Mejor valorados</option>
+                            <option value="recent">Recientes</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="paginationContainerTop" class="mb-4 hidden"></div>
+                <div class="space-y-4 results-section" id="resultsList">
+                    <div class="bg-white rounded-2xl p-6 border border-gray-100">
+                        <div class="flex gap-4">
+                            <div class="loading-skeleton w-48 h-32 rounded-xl shrink-0"></div>
+                            <div class="flex-1 space-y-3">
+                                <div class="loading-skeleton w-3/4 h-6 rounded"></div>
+                                <div class="loading-skeleton w-1/2 h-4 rounded"></div>
+                                <div class="loading-skeleton w-full h-16 rounded"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="paginationContainer" class="mt-10 hidden"></div>
+
+                <!-- E3.3b — "Ver más resultados" (reemplaza la paginación numerada) -->
+                <div id="loadMoreWrap" class="mt-6 hidden">
+                    <button class="rp-loadmore" onclick="loadMore()"><i class="fas fa-arrow-down"></i> Ver m&aacute;s resultados</button>
+                </div>
+
+                <!-- E3.3b — Bloque "¿No encontrás lo que buscás?" -->
+                <div class="mt-8 rounded-2xl p-5 text-center" style="background:#F5F7FB;border:1px solid #E3E8F0">
+                    <div class="mx-auto mb-2 flex items-center justify-center" style="width:44px;height:44px;border-radius:12px;background:#fff;border:1px solid #E3E8F0"><i class="fas fa-magnifying-glass" style="color:#7EC8E3"></i></div>
+                    <h3 class="font-black text-base" style="color:#0F1E36">&iquest;No encontr&aacute;s lo que busc&aacute;s?</h3>
+                    <p class="text-sm mt-1 mb-4" style="color:#52607A">Sum&aacute; tu negocio gratis para que aparezca ac&aacute;, o cont&aacute;nos qu&eacute; falta.</p>
+                    <div class="flex flex-col sm:flex-row gap-2 justify-center">
+                        <button onclick="openRegistroEmpresaCheck('basic')" class="rounded-xl font-bold text-sm inline-flex items-center justify-center gap-2 px-5" style="height:46px;background:#E8B84B;color:#0F1E36"><i class="fas fa-plus"></i> Registrar mi negocio</button>
+                        <button onclick="rpSoporte()" class="rounded-xl font-bold text-sm inline-flex items-center justify-center gap-2 px-5" style="height:46px;background:#fff;border:1px solid #E3E8F0;color:#1B3A6B"><i class="fab fa-whatsapp" style="color:#0F7A43"></i> Escribinos</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SERVICIOS -->
+    <!-- PLANES -->
+    <section id="planes" class="py-24 bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="text-center mb-16">
+                <span id="plansLabel" class="text-brand-600 font-bold text-sm uppercase tracking-widest">Precios</span>
+                <h3 id="plansTitle" class="text-3xl md:text-5xl font-bold text-gray-900 mt-3 font-display">Planes para cada negocio</h3>
+                <p id="plansDesc" class="text-gray-500 mt-4 text-lg max-w-2xl mx-auto">
+                    Desde la ficha básica hasta la presencia digital completa.
+                    <span class="text-gold-600 font-semibold">Sin contratos</span>, cancelá cuando quieras.
+                </p>
+            </div>
+
+            <!-- Desktop: grid 3 columnas -->
+            <div class="hidden md:grid md:grid-cols-3 gap-8 max-w-5xl mx-auto" id="plansPublicGrid">
+                <div class="plan-card bg-white rounded-3xl p-8 shadow-sm animate-pulse"><div class="h-6 bg-gray-200 rounded mb-4 w-2/3"></div><div class="h-10 bg-gray-200 rounded mb-6 w-1/2"></div><div class="space-y-3"><div class="h-4 bg-gray-100 rounded w-full"></div><div class="h-4 bg-gray-100 rounded w-full"></div><div class="h-4 bg-gray-100 rounded w-full"></div></div></div>
+                <div class="plan-card featured bg-white rounded-3xl p-8 shadow-lg animate-pulse"><div class="h-6 bg-gray-200 rounded mb-4 w-2/3"></div><div class="h-10 bg-gray-200 rounded mb-6 w-1/2"></div><div class="space-y-3"><div class="h-4 bg-gray-100 rounded w-full"></div><div class="h-4 bg-gray-100 rounded w-full"></div><div class="h-4 bg-gray-100 rounded w-full"></div></div></div>
+                <div class="plan-card bg-white rounded-3xl p-8 shadow-sm animate-pulse"><div class="h-6 bg-gray-200 rounded mb-4 w-2/3"></div><div class="h-10 bg-gray-200 rounded mb-6 w-1/2"></div><div class="space-y-3"><div class="h-4 bg-gray-100 rounded w-full"></div><div class="h-4 bg-gray-100 rounded w-full"></div><div class="h-4 bg-gray-100 rounded w-full"></div></div></div>
+            </div>
+
+            <!-- Mobile: carrusel con snap-scroll -->
+            <div class="md:hidden relative">
+                <div id="plansCarousel" class="flex items-stretch gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-4 -mx-4 px-4"
+                     style="scrollbar-width:none;-ms-overflow-style:none">
+                    <!-- Cards se inyectan por JS -->
+                </div>
+                <!-- Dots indicadores -->
+                <div id="plansDots" class="flex justify-center gap-2 mt-4"></div>
+            </div>
+
+            <p class="text-center text-sm text-gray-400 mt-8">
+                <i class="fas fa-shield-alt mr-1"></i> Sin contrato de permanencia &bull; Cancelá cuando quieras &bull; 14 días de garantía
+            </p>
+        </div>
+    </section>
+    <!-- SERVICIOS -->
+    <section id="servicios" class="py-24 bg-white">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="text-center mb-16">
+                <span class="text-brand-600 font-bold text-sm uppercase tracking-widest" id="servicesLabel">Soluciones</span>
+                <h3 class="text-3xl md:text-5xl font-bold text-gray-900 mt-3 font-display" id="servicesTitle">Hacé crecer tu negocio</h3>
+                <p class="text-gray-500 mt-4 text-lg max-w-2xl mx-auto" id="servicesDesc">
+                    No solo aparecés en el directorio. Te damos las herramientas digitales para que tu empresa
+                    <span class="text-brand-600 font-semibold">venda más, atienda mejor y destaque</span>.
+                </p>
+            </div>
+            <!-- Desktop: grid 2/4 columnas -->
+            <div class="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-6" id="servicesGrid">
+                <div class="col-span-full text-center py-12">
+                    <div class="loading-skeleton w-16 h-16 rounded-2xl mx-auto mb-4"></div>
+                    <div class="loading-skeleton w-32 h-4 rounded mx-auto"></div>
+                </div>
+            </div>
+
+            <!-- Mobile: carrusel con snap-scroll (igual que planes) -->
+            <div class="md:hidden">
+                <div id="servicesCarousel" class="flex gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-4 -mx-4 px-4"
+                     style="scrollbar-width:none;-ms-overflow-style:none">
+                </div>
+                <div id="servicesDots" class="flex justify-center gap-2 mt-4"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- (CTA duplicada eliminada: la propuesta para negocios vive en el bloque dorado del hero) -->
+
+    <!-- FOOTER -->
+    <footer class="bg-gray-900 text-gray-400 py-16">
+        <div class="max-w-7xl mx-auto px-4 grid md:grid-cols-2 lg:grid-cols-5 gap-10">
+            <div class="lg:col-span-2">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center shadow-md flex-shrink-0" style="background:linear-gradient(135deg,#1B3A6B,#2a5298)">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="10" cy="10" r="6" stroke="#7EC8E3" stroke-width="2.2"/>
+                            <line x1="14.8" y1="14.8" x2="20" y2="20" stroke="#7EC8E3" stroke-width="2.2" stroke-linecap="round"/>
+                            <circle cx="10" cy="10" r="2" fill="#E8B84B"/>
+                            <line x1="10" y1="12" x2="10" y2="15" stroke="#E8B84B" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="font-black text-xl leading-none text-white" id="footerSiteName">Reto<span style="color:#E8B84B">PA</span></div>
+                        <div class="text-[9px] font-semibold tracking-widest uppercase mt-0.5 brand-tagline" style="color:#7EC8E3;letter-spacing:0.12em">Encontrá lo que necesitás</div>
+                    </div>
+                </div>
+                <p id="footerTagline" class="text-sm text-gray-500 leading-relaxed mb-4 max-w-sm">
+                    El ecosistema comercial más completo de Paraguay. Conectamos personas con negocios 
+                    y damos herramientas digitales para que crezcan.
+                </p>
+                <div class="space-y-2 mb-5 text-sm">
+                    <a id="footerPhone" href="#" class="hidden items-center gap-2 text-gray-400 hover:text-brand-400 transition">
+                        <i class="fas fa-phone text-brand-500 w-4"></i><span id="footerPhoneText"></span>
+                    </a>
+                    <a id="footerEmail" href="#" class="hidden items-center gap-2 text-gray-400 hover:text-brand-400 transition">
+                        <i class="fas fa-envelope text-brand-500 w-4"></i><span id="footerEmailText"></span>
+                    </a>
+                </div>
+                <div class="flex gap-3" id="footerSocials">
+                    <a id="footerFacebook" href="#" target="_blank" rel="noopener" class="hidden w-10 h-10 bg-gray-800 rounded-xl items-center justify-center hover:bg-blue-700 hover:text-white transition"><i class="fab fa-facebook-f"></i></a>
+                    <a id="footerInstagram" href="#" target="_blank" rel="noopener" class="hidden w-10 h-10 bg-gray-800 rounded-xl items-center justify-center hover:bg-pink-600 hover:text-white transition"><i class="fab fa-instagram"></i></a>
+                    <a id="footerLinkedin" href="#" target="_blank" rel="noopener" class="hidden w-10 h-10 bg-gray-800 rounded-xl items-center justify-center hover:bg-sky-700 hover:text-white transition"><i class="fab fa-linkedin-in"></i></a>
+                    <a id="footerWhatsapp" href="#" target="_blank" rel="noopener" class="hidden w-10 h-10 bg-gray-800 rounded-xl items-center justify-center hover:bg-green-600 hover:text-white transition"><i class="fab fa-whatsapp"></i></a>
+                    <a id="footerTwitter" href="#" target="_blank" rel="noopener" class="hidden w-10 h-10 bg-gray-800 rounded-xl items-center justify-center hover:bg-gray-600 hover:text-white transition"><i class="fab fa-x-twitter"></i></a>
+                    <a id="footerTiktok" href="#" target="_blank" rel="noopener" class="hidden w-10 h-10 bg-gray-800 rounded-xl items-center justify-center hover:bg-gray-600 hover:text-white transition"><i class="fab fa-tiktok"></i></a>
+                </div>
+            </div>
+
+            <div>
+                <h5 id="footerCol2Title" class="text-white font-bold mb-4 uppercase text-sm tracking-wider">Directorio</h5>
+                <ul id="footerCol2Links" class="space-y-3 text-sm">
+                    <li><a href="#directorio" class="hover:text-brand-400 transition flex items-center gap-2"><i class="fas fa-chevron-right text-xs text-gray-600"></i> Buscar empresas</a></li>
+                    <li><a href="/ofertas" class="hover:text-brand-400 transition flex items-center gap-2"><i class="fas fa-tag text-xs text-brand-400"></i> Ofertas</a></li>
+                    <li><a href="#categorias" class="hover:text-brand-400 transition flex items-center gap-2"><i class="fas fa-chevron-right text-xs text-gray-600"></i> Categor&iacute;as</a></li>
+                    <li><a onclick="openRegistroEmpresaCheck()" href="#" class="hover:text-brand-400 transition flex items-center gap-2"><i class="fas fa-chevron-right text-xs text-gray-600"></i> Registrar empresa</a></li>
+                </ul>
+            </div>
+
+            <div>
+                <h5 id="footerCol3Title" class="text-white font-bold mb-4 uppercase text-sm tracking-wider">Servicios</h5>
+                <ul id="footerCol3Links" class="space-y-3 text-sm">
+                    <li><a href="#" class="hover:text-brand-400 transition flex items-center gap-2"><i class="fas fa-chevron-right text-xs text-gray-600"></i> Sitios Web</a></li>
+                    <li><a href="#" class="hover:text-brand-400 transition flex items-center gap-2"><i class="fas fa-chevron-right text-xs text-gray-600"></i> CRM</a></li>
+                    <li><a href="#" class="hover:text-brand-400 transition flex items-center gap-2"><i class="fas fa-chevron-right text-xs text-gray-600"></i> ERP</a></li>
+                    <li><a href="#" class="hover:text-brand-400 transition flex items-center gap-2"><i class="fas fa-chevron-right text-xs text-gray-600"></i> Email Empresarial</a></li>
+                </ul>
+            </div>
+
+            <div>
+                <h5 id="footerCol4Title" class="text-white font-bold mb-4 uppercase text-sm tracking-wider">Empresa</h5>
+                <ul id="footerCol4Links" class="space-y-3 text-sm">
+                    <li><a href="https://www.hepta.com.py/" target="_blank" class="hover:text-brand-400 transition flex items-center gap-2"><i class="fas fa-chevron-right text-xs text-gray-600"></i> HEPTA GROUP</a></li>
+                    <li><a href="#planes" class="hover:text-brand-400 transition flex items-center gap-2"><i class="fas fa-chevron-right text-xs text-gray-600"></i> Planes y precios</a></li>
+                    <li><a id="footerContactLink" href="#" class="hover:text-brand-400 transition flex items-center gap-2"><i class="fas fa-chevron-right text-xs text-gray-600"></i> Contacto</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="max-w-7xl mx-auto px-4 mt-12 pt-8 border-t border-gray-800 flex flex-col md:flex-row justify-between items-center gap-4">
+            <p id="footerCopyright" class="text-sm text-gray-600">
+                © 2026 <a href="https://www.hepta.com.py/" target="_blank" class="text-brand-400 hover:text-brand-300 transition font-semibold">HEPTA GROUP</a>. 
+                Todos los derechos reservados. Paraguay 🇵🇾
+            </p>
+            <div class="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 text-sm text-gray-600">
+                <div class="flex items-center gap-4">
+                    <a href="/terminos.html" class="hover:text-brand-400 transition">Términos</a>
+                    <a href="/privacidad.html" class="hover:text-brand-400 transition">Privacidad</a>
+                    <a href="#" onclick="rpSoporte();return false" class="hover:text-brand-400 transition">Soporte</a>
+                </div>
+                <div class="flex items-center gap-4">
+                    <span class="flex items-center gap-1"><i class="fas fa-lock text-green-500"></i> SSL Seguro</span>
+                    <span class="text-gray-500">Un producto <a href="https://www.hepta.com.py/" target="_blank" class="text-brand-400 hover:underline">HEPTA GROUP</a></span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- MODAL PERFIL EMPRESA -->
+    <div id="profileModal" class="fixed inset-0 z-[85] hidden">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeModal()"></div>
+        <div class="absolute inset-2 sm:inset-4 md:inset-8 lg:inset-y-10 bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col mx-auto" style="max-width:1200px;left:0;right:0;animation: modalIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;">
+            <div class="flex-1 overflow-y-auto" id="modalContent"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: TODAS LAS CATEGORÍAS (E3.3a) -->
+    <div id="catPickerModal" class="fixed inset-0 z-[90] hidden">
+        <div class="absolute inset-0 bg-black/50" onclick="rpCloseCatPicker()"></div>
+        <div class="absolute inset-x-0 bottom-0 top-14 md:inset-x-auto md:left-1/2 md:top-16 md:bottom-16 md:-translate-x-1/2 md:w-[480px] bg-white rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden" style="animation: modalIn 0.35s cubic-bezier(0.16,1,0.3,1) forwards">
+            <div class="p-4 border-b border-gray-100">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-black text-lg" style="color:#0F1E36">Eleg&iacute; una categor&iacute;a</h3>
+                    <button onclick="rpCloseCatPicker()" class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="relative">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <input id="catPickerSearch" type="text" oninput="rpRenderCatList(this.value)" placeholder="Buscar rubro&hellip;" autocomplete="off" class="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm">
+                </div>
+            </div>
+            <div id="catPickerList" class="flex-1 overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <!-- MODAL REGISTRO EMPRESA (con login obligatorio) -->
+    <!-- z-index 10000 (inline): el banner puede abrirse con una ficha abierta (#profileModal z-85
+         y la barra .rp-ficha-actions z-86); con z-[70] el formulario quedaba DETRÁS de la ficha. -->
+    <div id="registroModal" class="fixed inset-0 hidden" style="z-index:10000">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeRegistroModal()"></div>
+        <div class="absolute inset-4 md:inset-10 lg:inset-20 bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" style="animation: modalIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;">
+            <div class="flex-1 overflow-y-auto p-6 md:p-10 max-w-4xl mx-auto w-full">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900 font-display">Registrá tu empresa</h2>
+                        <p class="text-gray-500 text-sm mt-1">Unite al ecosistema comercial más grande de Paraguay</p>
+                    </div>
+                    <button onclick="closeRegistroModal()" class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- Paso 1: Selección de plan -->
+                <div id="stepPlan" class="space-y-4">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">¿Qué plan querés?</h3>
+                    <div class="grid md:grid-cols-3 gap-4" id="planSelectGrid">
+                        <div class="animate-pulse border-2 border-gray-100 rounded-xl p-5 text-center"><div class="h-8 bg-gray-200 rounded mb-2"></div><div class="h-6 bg-gray-100 rounded"></div></div>
+                        <div class="animate-pulse border-2 border-gray-100 rounded-xl p-5 text-center"><div class="h-8 bg-gray-200 rounded mb-2"></div><div class="h-6 bg-gray-100 rounded"></div></div>
+                        <div class="animate-pulse border-2 border-gray-100 rounded-xl p-5 text-center"><div class="h-8 bg-gray-200 rounded mb-2"></div><div class="h-6 bg-gray-100 rounded"></div></div>
+                    </div>
+                </div>
+
+                <!-- Paso 2: Formulario de empresa -->
+                <form id="registroForm" class="hidden space-y-4">
+                    <div class="rounded-xl p-3" style="background:#F5F7FB;border:1px solid #E3E8F0">
+                        <p class="text-sm" style="color:#52607A"><i class="fas fa-bolt text-brand-500 mr-1"></i> Public&aacute; tu negocio en 30 segundos. Las fotos, horarios, direcci&oacute;n y dem&aacute;s los complet&aacute;s despu&eacute;s desde tu panel.</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Nombre del negocio <span class="text-red-500">*</span></label>
+                        <input type="text" id="bizTradeName" required class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-brand-500 focus:border-brand-500" placeholder="Ej. Cerrajer&iacute;a El R&aacute;pido">
+                        <input type="hidden" id="bizName">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Categor&iacute;a <span class="text-red-500">*</span></label>
+                        <select id="bizCategory" required class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                            <option value="">Seleccion&aacute; una categor&iacute;a</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Ciudad <span class="text-red-500">*</span></label>
+                        <select id="bizCity" required class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                            <option value="">Seleccion&aacute; una ciudad</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1"><i class="fab fa-whatsapp text-green-600 mr-1"></i> WhatsApp <span class="text-red-500">*</span></label>
+                        <div class="flex">
+                            <select id="bizWaPrefix" class="border border-r-0 border-gray-200 rounded-l-xl px-3 py-3 bg-gray-50 text-sm text-gray-700">
+                                <option value="595">🇵🇾 +595</option>
+                                <option value="54">🇦🇷 +54</option>
+                                <option value="55">🇧🇷 +55</option>
+                            </select>
+                            <input type="tel" id="bizWhatsapp" required class="flex-1 border border-gray-200 rounded-r-xl px-4 py-3 focus:ring-2 focus:ring-brand-500 focus:border-brand-500" placeholder="981 620 195">
+                        </div>
+                        <p class="text-xs text-gray-400 mt-1">Es por donde te van a escribir tus clientes.</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1"><i class="fas fa-envelope text-brand-400 mr-1"></i> Tu correo <span class="text-red-500">*</span></label>
+                        <input type="email" id="bizRegEmail" required autocomplete="email" class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-brand-500 focus:border-brand-500" placeholder="tunegocio@correo.com">
+                        <p class="text-xs text-gray-400 mt-1">Con este correo vas a gestionar tu ficha m&aacute;s adelante. No se lo mostramos a los clientes.</p>
+                    </div>
+
+                    <!-- Logo / foto — OPCIONAL. Suave, invita a mostrar la marca sin obligar. -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="text-sm font-semibold text-gray-700"><i class="fas fa-image text-brand-400 mr-1"></i> Logo o foto</label>
+                            <span class="text-xs px-2 py-0.5 rounded-full" style="background:#F5F7FB;color:#52607A;border:1px solid #E3E8F0">Opcional</span>
+                        </div>
+                        <input type="file" id="bizImageFile" accept="image/*" class="hidden" onchange="handleImageUpload(this)">
+                        <div id="imageUploadZone" onclick="document.getElementById('bizImageFile').click()"
+                             ondragover="event.preventDefault(); this.style.borderColor='#7EC8E3'; this.style.background='#F0FAFE'"
+                             ondragleave="this.style.borderColor='#E3E8F0'; this.style.background='#F5F7FB'"
+                             ondrop="handlePublicImageDrop(event)"
+                             class="rounded-xl cursor-pointer transition text-center px-3 py-4"
+                             style="border:1.5px dashed #E3E8F0;background:#F5F7FB">
+                            <div id="uploadPlaceholder">
+                                <i class="fas fa-cloud-arrow-up text-2xl" style="color:#7EC8E3"></i>
+                                <p class="text-sm font-medium mt-1" style="color:#0F1E36">Mostr&aacute; tu marca</p>
+                                <p class="text-xs" style="color:#52607A">Tocá para subir tu logo o una foto &middot; podés hacerlo despu&eacute;s desde el panel</p>
+                            </div>
+                            <div id="uploadPreview" class="hidden">
+                                <img id="previewImg" src="" alt="Logo" class="mx-auto rounded-lg object-cover" style="width:72px;height:72px">
+                                <button type="button" onclick="event.stopPropagation(); clearImageUpload()" class="text-xs mt-2 underline" style="color:#52607A">Quitar</button>
+                            </div>
+                            <div id="uploadProgress" class="hidden">
+                                <i class="fas fa-spinner fa-spin text-xl" style="color:#7EC8E3"></i>
+                                <p class="text-xs mt-1" style="color:#52607A">Subiendo&hellip;</p>
+                            </div>
+                        </div>
+                        <input type="hidden" id="bizImageUrl">
+                    </div>
+
+                    <!-- Se completan solos (usuario logueado) o desde el panel -->
+                    <input type="hidden" id="contactName">
+                    <input type="hidden" id="contactEmail">
+
+                    <label class="flex items-start gap-2 text-sm text-gray-600 pt-1">
+                        <input type="checkbox" required class="mt-1 w-4 h-4">
+                        <span>Acepto los <a href="/terminos.html" target="_blank" rel="noopener" class="text-brand-600 underline">t&eacute;rminos de uso</a> y la <a href="/privacidad.html" target="_blank" rel="noopener" class="text-brand-600 underline">pol&iacute;tica de privacidad</a></span>
+                    </label>
+
+                    <div class="flex gap-2 pt-1">
+                        <button type="button" onclick="closeRegistroModal()" class="px-4 py-3 rounded-xl border border-gray-200 text-gray-600 font-semibold">Cancelar</button>
+                        <button type="submit" class="flex-1 rounded-xl font-bold text-base inline-flex items-center justify-center gap-2" style="height:52px;background:#E8B84B;color:#0F1E36"><i class="fas fa-rocket"></i> Publicar mi negocio gratis</button>
+                    </div>
+                </form>
+
+                <div id="registroSuccess" class="hidden text-center py-10">
+                    <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center text-4xl text-green-500 mx-auto mb-4">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">¡Tu negocio ya está publicado!</h3>
+                    <p class="text-gray-500 mb-2">Ya aparece en el directorio como <span class="font-medium text-gray-700">No verificado</span> (en revisión).</p>
+                    <p class="text-sm text-gray-500 mb-6">Guardamos tu correo <span id="successEmail" class="font-semibold text-brand-600"></span> para que gestiones tu ficha. Te vamos a escribir ahí con el acceso.</p>
+                    <button onclick="closeRegistroModal(); loadBusinesses(true, 'resultsList');" class="bg-gray-100 text-gray-700 px-6 py-3 rounded-xl font-bold hover:bg-gray-200 transition">
+                        Volver al directorio
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL LOGIN -->
+    <div id="loginModal" class="fixed inset-0 z-[70] hidden">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeLoginModal()"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md" style="animation: modalIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-900 font-display">Ingresar</h2>
+                <button onclick="closeLoginModal()" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" id="loginEmail" required class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-brand-500 focus:border-brand-500" placeholder="tu@email.com">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                    <div class="relative">
+                        <input type="password" id="loginPassword" required class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 pr-10" placeholder="••••••••">
+                        <button type="button" onclick="togglePwdPublic('loginPassword')" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><i class="fas fa-eye text-sm"></i></button>
+                    </div>
+                    <div class="text-right mt-1">
+                        <button type="button" onclick="openForgotPassword()" class="text-xs text-brand-600 hover:underline">¿Olvidaste tu contraseña?</button>
+                    </div>
+                </div>
+                <div id="loginError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2"></div>
+                <button type="submit" class="w-full btn-brand text-white py-3 rounded-xl font-bold shadow-lg">
+                    Ingresar
+                </button>
+            </form>
+
+            <!-- Paso 2: MFA (se muestra si el usuario tiene 2FA activado) -->
+            <div id="mfaStep" class="hidden space-y-4">
+                <div class="text-center py-2">
+                    <div class="w-14 h-14 bg-brand-100 rounded-2xl flex items-center justify-center text-brand-600 text-2xl mx-auto mb-3"><i class="fas fa-mobile-alt"></i></div>
+                    <h3 class="font-bold text-gray-900">Verificación en dos pasos</h3>
+                    <p class="text-sm text-gray-500 mt-1">Enviamos un código de 6 dígitos a tu email.</p>
+                </div>
+                <div>
+                    <input type="text" id="mfaOtpInput" maxlength="6" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-center text-3xl font-mono tracking-widest focus:ring-2 focus:ring-brand-500" placeholder="_ _ _ _ _ _" autocomplete="one-time-code">
+                </div>
+                <div id="mfaError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center"></div>
+                <button onclick="submitMFALogin()" class="w-full btn-brand text-white py-3 rounded-xl font-bold">Verificar código</button>
+                <button onclick="resendMFACode()" class="w-full border border-gray-200 text-gray-600 py-2 rounded-xl text-sm hover:bg-gray-50">Reenviar código</button>
+            </div>
+
+            <!-- Recuperar contraseña -->
+            <div id="forgotForm" class="hidden space-y-4">
+                <div class="text-center pb-2">
+                    <i class="fas fa-lock-open text-3xl text-brand-500 mb-2"></i>
+                    <h3 class="font-bold text-gray-900">Recuperar contraseña</h3>
+                    <p class="text-sm text-gray-500 mt-1">Te enviamos un enlace para restablecer tu contraseña.</p>
+                </div>
+                <input type="email" id="forgotEmail" class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-brand-500" placeholder="tu@email.com">
+                <div id="forgotMsg" class="hidden text-sm rounded-lg px-3 py-2"></div>
+                <button onclick="submitForgotPassword()" class="w-full btn-brand text-white py-3 rounded-xl font-bold">Enviar enlace</button>
+                <button onclick="backToLogin()" class="w-full text-sm text-gray-500 hover:text-brand-600">← Volver al login</button>
+            </div>
+
+            <!-- Reset contraseña (cuando viene con token ?reset=xxx) -->
+            <div id="resetForm" class="hidden space-y-4">
+                <div class="text-center pb-2">
+                    <i id="resetIcon" class="fas fa-key text-3xl text-brand-500 mb-2"></i>
+                    <h3 id="resetTitle" class="font-bold text-gray-900">Nueva contraseña</h3>
+                    <p id="resetSubtitle" class="text-sm text-gray-500 mt-1 hidden"></p>
+                </div>
+                <div class="relative">
+                    <input type="password" id="resetPassword" class="w-full border border-gray-200 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-brand-500" placeholder="Nueva contraseña (mín. 8 caracteres)" minlength="8">
+                    <button type="button" onclick="togglePwdPublic('resetPassword')" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><i class="fas fa-eye text-sm"></i></button>
+                </div>
+                <div class="relative">
+                    <input type="password" id="resetPasswordConfirm" class="w-full border border-gray-200 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-brand-500" placeholder="Confirmá la nueva contraseña">
+                    <button type="button" onclick="togglePwdPublic('resetPasswordConfirm')" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><i class="fas fa-eye text-sm"></i></button>
+                </div>
+                <div id="resetMsg" class="hidden text-sm rounded-lg px-3 py-2"></div>
+                <button id="resetSubmitBtn" onclick="submitResetPassword()" class="w-full btn-brand text-white py-3 rounded-xl font-bold">Cambiar contraseña</button>
+            </div>
+
+            <div class="mt-6 text-center">
+                <p class="text-sm text-gray-500">¿No tenés cuenta? <button onclick="switchToRegister()" class="text-brand-600 font-bold hover:underline">Registrate</button></p>
+            </div>
+
+            <form id="registerForm" class="hidden space-y-4 mt-4 pt-4 border-t border-gray-100">
+                <h3 class="text-lg font-bold text-gray-800">Crear cuenta</h3>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+                    <input type="text" id="regName" required class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" id="regEmail" required class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                    <input type="password" id="regPassword" required minlength="6" class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                </div>
+                <button type="submit" class="w-full btn-brand text-white py-3 rounded-xl font-bold shadow-lg">
+                    Crear cuenta
+                </button>
+                <p class="text-sm text-gray-500 text-center">¿Ya tenés cuenta? <button onclick="switchToLogin()" class="text-brand-600 font-bold hover:underline">Ingresá</button></p>
+            </form>
+        </div>
+    </div>
+
+        <!-- RetoPA JS modules -->
+    <script src="/js/config.js"></script>
+    <script src="/js/plans.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/directory.js?v27s65e"></script>
+    <script src="/js/search.js"></script>
+    <script src="/js/profile.js?v27s65e"></script>
+    <script src="/js/filters.js"></script>
+    <script src="/js/registro.js"></script>
+    <script src="/js/interactions.js"></script>
+    <script src="/js/distance.js"></script>
+    <script src="/js/app.js?v27s65e"></script>
+    <script src="/js/registerBanner.js"></script>
+
+    <!-- ════ Barra de navegación inferior (mobile · opción A) ════ -->
+    <nav class="rp-bottomnav" id="rpBottomNav" aria-label="Navegación principal"></nav>
+    <script>
+    (function(){
+      // Helpers de acción (definidos ANTES de armar la constante RP_NAV).
+      window.rpGoSearch = function(){
+        var el = document.getElementById('mainSearch');
+        if (el){ try{ el.scrollIntoView({block:'center',behavior:'smooth'}); }catch(e){} setTimeout(function(){ el.focus(); }, 250); }
+        rpSetActive('buscar');
+      };
+      window.rpMiNegocio = function(){
+        if (localStorage.getItem('token')) location.href = '/cliente';
+        else if (typeof openRegistroEmpresaCheck === 'function') openRegistroEmpresaCheck();
+        else location.href = '/cliente';
+      };
+      window.rpGuardados = function(){ if (typeof openLoginModal === 'function') openLoginModal(); else location.href = '/cliente'; };
+      window.rpSoporte = function(){
+        if (window._retopaWaUrl){ window.open(window._retopaWaUrl, '_blank'); return; }
+        var em = document.getElementById('footerEmail');
+        if (em && em.href && em.href.indexOf('mailto:') === 0){ location.href = em.href; return; }
+        var f = document.querySelector('footer'); if (f) f.scrollIntoView({behavior:'smooth'});
+      };
+      window.rpSetActive = function(key){
+        var n = document.getElementById('rpBottomNav'); if (!n) return;
+        [].forEach.call(n.querySelectorAll('a'), function(a){ a.classList.toggle('active', a.getAttribute('data-key') === key); });
+      };
+      // Formato de números es-PY (14.468 · Gs. 199.000) — reutilizable.
+      window.rpFmtInt = function(n){ var x = Number(n); return isNaN(x) ? String(n == null ? '' : n) : x.toLocaleString('es-PY'); };
+      window.rpFmtGs  = function(n){ return 'Gs. ' + window.rpFmtInt(n); };
+      window.rpRubro  = function(term){ var i=document.getElementById('mainSearch'); if(i) i.value=term; if(typeof performSearch==='function') performSearch(); };
+
+      // "Guardados" depende del módulo de usuarios consumidores (aún no existe):
+      // se controla por esta constante, no por el markup.
+      var RP_FEATURE_GUARDADOS = false;
+      var RP_NAV = [
+        { key:'inicio',  label:'Inicio',     icon:'fa-house',            act:function(){ window.scrollTo({top:0,behavior:'smooth'}); } },
+        { key:'buscar',  label:'Buscar',     icon:'fa-magnifying-glass', act:window.rpGoSearch },
+        { key:'ofertas', label:'Ofertas',    icon:'fa-tag',              href:'/ofertas' }
+      ];
+      if (RP_FEATURE_GUARDADOS) RP_NAV.push({ key:'guardados', label:'Guardados', icon:'fa-heart', act:window.rpGuardados });
+      RP_NAV.push({ key:'negocio', label:'Mi negocio', icon:'fa-store', act:window.rpMiNegocio });
+
+      function render(){
+        var n = document.getElementById('rpBottomNav'); if (!n) return;
+        n.innerHTML = RP_NAV.map(function(it){
+          return '<a data-key="'+it.key+'" href="'+(it.href||'#')+'">'
+               + '<i class="fas '+it.icon+'"></i><span>'+it.label+'</span></a>';
+        }).join('');
+        [].forEach.call(n.querySelectorAll('a'), function(a){
+          var key = a.getAttribute('data-key');
+          var it  = RP_NAV.filter(function(x){ return x.key === key; })[0];
+          if (it && it.act){ a.addEventListener('click', function(e){ e.preventDefault(); it.act(); rpSetActive(key); }); }
+        });
+        rpSetActive('inicio');
+      }
+      if (document.readyState !== 'loading') render();
+      else document.addEventListener('DOMContentLoaded', render);
+    })();
+    </script>
+    <!-- ── COMBOBOX: Ciudad y Categoría ─────────────────────────────── -->
+    <script>
+    // Datos para los combos (se llenan desde loadCities/loadCategories)
+    window._comboData = { city: [], cat: [] };
+
+    function _normalize(s) {
+        return (s||'').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu,'');
+    }
+
+    function populateCityCombo(cities) {
+        window._comboData.city = cities.map(c => ({
+            label: c.department ? `${c.name} — ${c.department}` : c.name,
+            value: c.name,
+            search: _normalize(c.name) + ' ' + _normalize(c.department||'')
+        }));
+    }
+
+    function populateCatCombo(categories) {
+        // padres primero, luego hijos con indent
+        const parents = categories.filter(c => !c.parentId);
+        const kids    = categories.filter(c =>  c.parentId);
+        const ordered = [];
+        parents.forEach(p => {
+            ordered.push({ label: p.name, value: p.slug, search: _normalize(p.name), group: true });
+            kids.filter(k => k.parentId === p.id)
+                .forEach(k => ordered.push({ label: '  › ' + k.name, value: k.slug, search: _normalize(k.name) + ' ' + _normalize(p.name) }));
+        });
+        window._comboData.cat = ordered;
+    }
+
+    function openCombo(type) {
+        renderComboList(type, '');
+        document.getElementById(type + 'ComboList').classList.remove('hidden');
+    }
+
+    function delayCloseCombo(type) {
+        setTimeout(() => document.getElementById(type + 'ComboList').classList.add('hidden'), 200);
+    }
+
+    function filterCombo(type) {
+        const q = _normalize(document.getElementById(type + 'ComboInput').value);
+        renderComboList(type, q);
+        document.getElementById(type + 'ComboList').classList.remove('hidden');
+        // Si se borra todo, limpiar el hidden
+        if (!document.getElementById(type + 'ComboInput').value.trim()) {
+            document.getElementById(type === 'city' ? 'citySelect' : 'categorySelect').value = '';
+        }
+    }
+
+    function renderComboList(type, q) {
+        const list = document.getElementById(type + 'ComboList');
+        const data = window._comboData[type];
+        const hiddenId = type === 'city' ? 'citySelect' : 'categorySelect';
+
+        const items = q
+            ? data.filter(d => d.search.includes(q))
+            : data;
+
+        if (!items.length) {
+            list.innerHTML = '<div class="px-4 py-3 text-sm text-gray-400">Sin resultados</div>';
+            return;
+        }
+
+        // Opción "Todos"
+        const allLabel = type === 'city' ? 'Todas las ciudades' : 'Todas las categorías';
+        list.innerHTML = `<div class="px-4 py-2.5 text-sm text-gray-500 hover:bg-gray-50 cursor-pointer border-b border-gray-50"
+            onmousedown="selectCombo('${type}','','${allLabel.replace(/'/g,"\\'")}')">${allLabel}</div>`
+            + items.slice(0, 80).map(d => `
+            <div class="px-4 py-2.5 text-sm cursor-pointer hover:bg-brand-50 hover:text-brand-700 transition ${d.group ? 'font-semibold text-gray-700' : 'text-gray-600'}"
+                onmousedown="selectCombo('${type}','${d.value.replace(/'/g,"\\'")}','${d.label.replace(/'/g,"\\'")}')">${d.label}</div>`
+            ).join('');
+    }
+
+    function selectCombo(type, value, label) {
+        const inputId  = type + 'ComboInput';
+        const hiddenId = type === 'city' ? 'citySelect' : 'categorySelect';
+        document.getElementById(inputId).value  = value ? label.trim() : '';
+        document.getElementById(hiddenId).value = value;
+        document.getElementById(type + 'ComboList').classList.add('hidden');
+    }
+    </script>
+    <!-- PWA: registro del Service Worker + actualización + instalación -->
+    <script>
+        // ── 1. Registro del SW + actualización automática silenciosa ─────────
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').then(reg => {
+                    // Buscar un SW nuevo al volver a la pestaña y cada 15 min, para que
+                    // las pestañas abiertas mucho tiempo también adopten los deploys.
+                    const checkForUpdate = () => { try { reg.update(); } catch (e) {} };
+                    document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+                    setInterval(checkForUpdate, 15 * 60 * 1000);
+                }).catch(e => console.warn('SW:', e));
+
+                // Cuando el SW nuevo toma control (tras un deploy), recargar una sola vez.
+                // Esto reemplaza el "Unregister manual": la app se actualiza sola al recargar.
+                let _reloaded = false;
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    if (_reloaded) return;
+                    _reloaded = true;
+                    window.location.reload();
+                });
+            });
+        }
+
+        // ── 2. Banner de instalación (Agregar a inicio) ──────────────────────
+        let _deferredPrompt = null;
+        const PWA_DISMISS_KEY = 'retopa_pwa_dismissed';
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            _deferredPrompt = e;
+            // No molestar si ya lo descartó hace poco (7 días)
+            try {
+                const d = localStorage.getItem(PWA_DISMISS_KEY);
+                if (d && (Date.now() - parseInt(d)) < 7*86400000) return;
+            } catch (e) {}
+            setTimeout(showInstallBanner, 3000); // esperar 3s para no ser intrusivo
+        });
+
+        function showInstallBanner() {
+            if (!_deferredPrompt || document.getElementById('pwaInstallBanner')) return;
+            const bar = document.createElement('div');
+            bar.id = 'pwaInstallBanner';
+            bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:20px;z-index:9998;background:#fff;color:#0f172a;padding:14px 16px;border-radius:16px;box-shadow:0 6px 28px rgba(0,0,0,.2);display:flex;align-items:center;gap:14px;font-family:system-ui,sans-serif;max-width:92vw;width:380px;animation:pwaUp .3s ease';
+            bar.innerHTML =
+                '<img src="/img/icon-192.png" style="width:44px;height:44px;border-radius:11px;flex-shrink:0" alt="RetoPA">' +
+                '<div style="flex:1;min-width:0">' +
+                    '<p style="margin:0;font-weight:800;font-size:14px">Instalá RetoPA</p>' +
+                    '<p style="margin:2px 0 0;font-size:12px;color:#64748b">Accedé más rápido desde tu pantalla de inicio</p>' +
+                '</div>' +
+                '<button id="pwaInstallBtn" style="background:#1B3A6B;color:#fff;border:none;padding:9px 16px;border-radius:11px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap">Instalar</button>' +
+                '<button id="pwaInstallClose" style="background:transparent;border:none;color:#94a3b8;font-size:22px;cursor:pointer;line-height:1;padding:0 2px">×</button>';
+            document.body.appendChild(bar);
+
+            document.getElementById('pwaInstallBtn').onclick = async () => {
+                bar.remove();
+                if (!_deferredPrompt) return;
+                _deferredPrompt.prompt();
+                await _deferredPrompt.userChoice;
+                _deferredPrompt = null;
+            };
+            document.getElementById('pwaInstallClose').onclick = () => {
+                bar.remove();
+                try { localStorage.setItem(PWA_DISMISS_KEY, String(Date.now())); } catch (e) {}
+            };
+        }
+
+        // Si ya está instalada, limpiar el deferredPrompt
+        window.addEventListener('appinstalled', () => {
+            _deferredPrompt = null;
+            const b = document.getElementById('pwaInstallBanner');
+            if (b) b.remove();
+        });
+    </script>
+    <style>
+        @keyframes pwaUp { from { opacity:0; transform:translate(-50%,16px); } to { opacity:1; transform:translate(-50%,0); } }
+    </style>
 </body>
 </html>

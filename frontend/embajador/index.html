@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="es" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Panel Embajador — RetoPA</title>
+    <link rel="stylesheet" href="/public/css/main.css">
+    <script>
+        if (localStorage.getItem('retopa_dark') === '1') document.documentElement.classList.add('dark');
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* ── Exactamente igual que panel cliente ── */
+        :root { --bottom-nav-h: 64px; }
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        body { background: #f1f5f9; font-family: 'Inter', system-ui, sans-serif; overscroll-behavior-y: contain; }
+        html.dark body { background: #0f172a; }
+
+        #bottomNav {
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+            height: var(--bottom-nav-h); background: white;
+            border-top: 1px solid #e2e8f0; display: flex;
+            padding-bottom: env(safe-area-inset-bottom);
+            box-shadow: 0 -4px 20px rgba(0,0,0,.07);
+        }
+        html.dark #bottomNav { background: #1e293b; border-color: #334155; }
+        .bnav-item {
+            flex: 1; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 3px; font-size: 10px; font-weight: 600;
+            color: #94a3b8; cursor: pointer; transition: color .15s; padding: 4px 0;
+            position: relative; border: none; background: none;
+        }
+        .bnav-item i { font-size: 18px; transition: transform .2s; }
+        .bnav-item.active { color: #0ea5e9; }
+        .bnav-item.active i { transform: translateY(-2px); }
+        .bnav-badge {
+            position: absolute; top: 6px; right: calc(50% - 16px);
+            background: #ef4444; color: white; border-radius: 99px;
+            font-size: 9px; font-weight: 700; min-width: 16px; height: 16px;
+            display: flex; align-items: center; justify-content: center; padding: 0 4px;
+        }
+
+        .sidebar-item { transition: all .15s; border-radius: 10px; }
+        .sidebar-item:hover, .sidebar-item.active { background: #e0f2fe; color: #0284c7; }
+        .sidebar-item.active { font-weight: 700; }
+
+        #mainContent {
+            padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 16px);
+        }
+        @media (min-width: 768px) {
+            #bottomNav { display: none; }
+            #desktopSidebar { display: block; }
+            #mainContent { padding-bottom: 2rem; }
+        }
+
+        .stat-card { background: white; border-radius: 16px; border: 1px solid #f1f5f9; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+        html.dark .stat-card { background: #1e293b; border-color: #334155; }
+        .fade-in { animation: fadeIn .25s ease; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:none } }
+        .section-header {
+            position: sticky; top: 0; z-index: 20;
+            background: #f1f5f9; padding: 12px 16px 8px;
+            border-bottom: 1px solid transparent;
+        }
+        html.dark .section-header { background: #0f172a; }
+        .touch-btn { min-height: 44px; min-width: 44px; }
+
+        html.dark .bg-white { background-color: #1e293b !important; }
+        html.dark .bg-gray-50 { background-color: #0f172a !important; }
+        html.dark .text-gray-900 { color: #f1f5f9 !important; }
+        html.dark .text-gray-700 { color: #cbd5e1 !important; }
+        html.dark .text-gray-600 { color: #94a3b8 !important; }
+        html.dark .border-gray-100 { border-color: #334155 !important; }
+        html.dark .border-gray-200 { border-color: #475569 !important; }
+
+        /* Modal bottom-sheet igual que cliente */
+        @media (max-width: 767px) {
+            .modal-sheet > .modal-inner {
+                position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important;
+                top: auto !important; max-height: 92dvh !important;
+                border-radius: 20px 20px 0 0 !important;
+                transform: translateY(100%); transition: transform .3s cubic-bezier(.4,0,.2,1);
+                width: 100% !important; max-width: 100% !important;
+            }
+            .modal-sheet.open > .modal-inner { transform: translateY(0); }
+            .modal-sheet > .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); }
+            .modal-drag-handle {
+                width: 36px; height: 4px; background: #e2e8f0;
+                border-radius: 2px; margin: 10px auto 4px; flex-shrink: 0;
+            }
+        }
+        @media (min-width: 768px) {
+            .modal-sheet > .modal-inner { max-width: 640px; width: 100%; max-height: 90vh; }
+            .modal-drag-handle { display: none; }
+        }
+
+        .mobile-tabs {
+            display: flex; gap: 0; overflow-x: auto; scrollbar-width: none;
+            padding: 0 16px; border-bottom: 1px solid #e2e8f0;
+        }
+        .mobile-tabs::-webkit-scrollbar { display: none; }
+        .mobile-tab {
+            flex-shrink: 0; padding: 10px 16px; font-size: 13px; font-weight: 600;
+            color: #94a3b8; border-bottom: 2px solid transparent; white-space: nowrap;
+            cursor: pointer; transition: all .15s;
+        }
+        .mobile-tab.active { color: #0ea5e9; border-bottom-color: #0ea5e9; }
+
+        .biz-mobile-card {
+            background: white; border-radius: 16px; border: 1px solid #e2e8f0;
+            overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        }
+        html.dark .biz-mobile-card { background: #1e293b; border-color: #334155; }
+
+        /* Chips de "qué falta" en Explorar fichas */
+        .chip-falta {
+            display: inline-flex; align-items: center;
+            background: #fef3c7; color: #92400e;
+            font-size: 10px; font-weight: 600;
+            padding: 2px 8px; border-radius: 99px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── TOP NAV (igual que panel cliente) ─────────────────────────────── -->
+<nav class="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 h-14 md:h-16 flex items-center justify-between gap-3">
+
+        <!-- Logo -->
+        <a href="/" class="flex items-center gap-2 shrink-0">
+            <div class="w-8 h-8 rounded-xl flex items-center justify-center" style="background:linear-gradient(135deg,#1B3A6B,#2a5298)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <circle cx="10" cy="10" r="6" stroke="#7EC8E3" stroke-width="2.2"/>
+                    <line x1="14.8" y1="14.8" x2="20" y2="20" stroke="#7EC8E3" stroke-width="2.2" stroke-linecap="round"/>
+                    <circle cx="10" cy="10" r="2" fill="#E8B84B"/>
+                    <line x1="10" y1="12" x2="10" y2="15" stroke="#E8B84B" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+            </div>
+            <div class="hidden sm:block">
+                <div class="font-black text-gray-900 text-base leading-none">Reto<span style="color:#E8B84B">PA</span></div>
+                <div class="text-[8px] font-semibold tracking-widest uppercase" style="color:#7EC8E3">Embajador</div>
+            </div>
+        </a>
+
+        <!-- Badge central -->
+        <div class="flex-1 flex justify-center">
+            <span class="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold px-3 py-1.5 rounded-full">
+                <i class="fas fa-user-tie"></i> Panel Embajador
+            </span>
+        </div>
+
+        <!-- Acciones derecha -->
+        <div class="flex items-center gap-2 shrink-0">
+            <button onclick="toggleDarkMode()" class="touch-btn w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 transition">
+                <i class="fas fa-moon text-sm dark:hidden"></i>
+                <i class="fas fa-sun text-sm hidden dark:inline text-amber-400"></i>
+            </button>
+            <a href="/" class="hidden md:flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+                <i class="fas fa-arrow-left text-xs"></i> Directorio
+            </a>
+            <div class="relative group">
+                <button class="touch-btn flex items-center gap-1.5 px-2 py-1.5 rounded-xl hover:bg-gray-100 transition">
+                    <div class="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center text-amber-700 font-bold text-sm" id="navAvatar">?</div>
+                    <span class="hidden sm:block text-sm font-medium text-gray-700 max-w-[100px] truncate" id="navName">...</span>
+                    <i class="fas fa-chevron-down text-xs text-gray-400"></i>
+                </button>
+                <div class="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-gray-100 hidden group-hover:block z-50 overflow-hidden">
+                    <a href="/" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-arrow-left text-gray-400 w-4"></i> Volver al directorio
+                    </a>
+                    <div class="border-t border-gray-100"></div>
+                    <button onclick="ambassadorLogout()" class="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
+                        <i class="fas fa-sign-out-alt w-4"></i> Cerrar sesión
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- ── MAIN LAYOUT ─────────────────────────────────────────────────────── -->
+<div class="flex max-w-7xl mx-auto md:px-4 md:py-8 md:gap-8">
+
+    <!-- SIDEBAR (desktop) -->
+    <aside id="desktopSidebar" class="hidden md:block w-56 shrink-0">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 sticky top-24">
+            <nav class="space-y-1">
+                <button onclick="showSection('dashboard')" id="nav-dashboard"
+                    class="sidebar-item active w-full text-left flex items-center gap-3 px-4 py-3 text-sm text-gray-700">
+                    <i class="fas fa-chart-line w-4 text-brand-500"></i> Dashboard
+                </button>
+                <button onclick="showSection('oportunidades')" id="nav-oportunidades"
+                    class="sidebar-item w-full text-left flex items-center gap-3 px-4 py-3 text-sm text-gray-700">
+                    <i class="fas fa-bullseye w-4 text-gray-400"></i> Oportunidades
+                    <span id="oppBadge" class="ml-auto bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full hidden">0</span>
+                </button>
+                <button onclick="showSection('businesses')" id="nav-businesses"
+                    class="sidebar-item w-full text-left flex items-center gap-3 px-4 py-3 text-sm text-gray-700">
+                    <i class="fas fa-building w-4 text-gray-400"></i> Mis fichas
+                    <span id="bnavPendingBadge" class="ml-auto bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full hidden">0</span>
+                </button>
+                <button onclick="showSection('explorar')" id="nav-explorar"
+                    class="sidebar-item w-full text-left flex items-center gap-3 px-4 py-3 text-sm text-gray-700">
+                    <i class="fas fa-search w-4 text-gray-400"></i> Explorar fichas
+                    <span id="availTotalBadge" class="ml-auto bg-brand-500 text-white text-[10px] px-1.5 py-0.5 rounded-full hidden"></span>
+                </button>
+                <div class="border-t border-gray-100 my-1"></div>
+                <button onclick="openNuevaFichaModal()" id="nav-nueva"
+                    class="sidebar-item w-full text-left flex items-center gap-3 px-4 py-3 text-sm text-brand-600 font-bold">
+                    <i class="fas fa-plus-circle w-4 text-brand-500"></i> Cargar ficha
+                </button>
+            </nav>
+            <div class="mt-4 pt-4 border-t border-gray-100 px-4 text-center">
+                <span class="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 text-xs font-bold px-3 py-1.5 rounded-full">
+                    <i class="fas fa-user-tie text-sm"></i> Embajador
+                </span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 min-w-0" id="mainContent">
+
+        <!-- ── DASHBOARD ─────────────────────────────────────── -->
+        <div id="section-dashboard" class="fade-in">
+            <div class="section-header md:hidden">
+                <h1 class="text-lg font-black text-gray-900">Dashboard</h1>
+                <p class="text-xs text-gray-500">Tus métricas como embajador</p>
+            </div>
+            <div class="hidden md:block mb-6 px-0">
+                <h1 class="text-2xl font-black text-gray-900">Dashboard</h1>
+                <p class="text-gray-500 text-sm mt-1">Tus métricas como embajador</p>
+            </div>
+
+            <div class="px-3 md:px-0 pt-3 md:pt-0 space-y-4">
+                <!-- KPIs -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="stat-card p-4">
+                        <div class="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center mb-2">
+                            <i class="fas fa-building text-blue-500 text-sm"></i>
+                        </div>
+                        <p class="text-2xl font-black text-gray-900" id="kpiTotal">—</p>
+                        <p class="text-xs text-gray-500 mt-0.5">Total cargadas</p>
+                    </div>
+                    <div class="stat-card p-4">
+                        <div class="w-9 h-9 bg-green-50 rounded-xl flex items-center justify-center mb-2">
+                            <i class="fas fa-check-circle text-green-500 text-sm"></i>
+                        </div>
+                        <p class="text-2xl font-black text-green-600" id="kpiPublished">—</p>
+                        <p class="text-xs text-gray-500 mt-0.5">Publicadas</p>
+                    </div>
+                    <div class="stat-card p-4">
+                        <div class="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center mb-2">
+                            <i class="fas fa-clock text-amber-500 text-sm"></i>
+                        </div>
+                        <p class="text-2xl font-black text-amber-500" id="kpiPending">—</p>
+                        <p class="text-xs text-gray-500 mt-0.5">En revisión</p>
+                    </div>
+                    <div class="stat-card p-4">
+                        <div class="w-9 h-9 bg-red-50 rounded-xl flex items-center justify-center mb-2">
+                            <i class="fas fa-times-circle text-red-400 text-sm"></i>
+                        </div>
+                        <p class="text-2xl font-black text-red-500" id="kpiRejected">—</p>
+                        <p class="text-xs text-gray-500 mt-0.5">Rechazadas</p>
+                    </div>
+                </div>
+
+                <!-- Últimas fichas -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-bold text-gray-900 text-sm">Últimas fichas cargadas</h3>
+                        <button onclick="showSection('businesses')" class="text-xs text-brand-600 hover:underline font-medium">Ver todas</button>
+                    </div>
+                    <div id="dashUltimasFichas">
+                        <p class="text-sm text-gray-400 text-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando...</p>
+                    </div>
+                </div>
+
+                <!-- Banner motivacional -->
+                <div class="rounded-2xl p-5 flex items-center gap-4" style="background:linear-gradient(135deg,#1B3A6B,#2a5298)">
+                    <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0" style="background:#E8B84B">
+                        <i class="fas fa-star text-white text-xl"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="font-bold text-white">¡Gracias por ser parte de RetoPA!</p>
+                        <p class="text-blue-200 text-sm mt-0.5">Cada ficha que cargás conecta negocios paraguayos con más clientes.</p>
+                    </div>
+                    <button onclick="openNuevaFichaModal()"
+                        class="shrink-0 bg-white text-[#1B3A6B] text-sm font-bold px-4 py-2 rounded-xl hover:bg-blue-50 transition">
+                        + Cargar
+                    </button>
+                </div>
+
+                <!-- CTA explorar fichas incompletas -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+                        <i class="fas fa-search text-amber-500 text-xl"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="font-bold text-gray-900 text-sm">Fichas incompletas disponibles</p>
+                        <p class="text-xs text-gray-400 mt-0.5">Tomá fichas existentes y completá sus datos para ganar más impacto.</p>
+                    </div>
+                    <button onclick="showSection('explorar')"
+                        class="shrink-0 bg-amber-500 text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-amber-600 transition">
+                        Explorar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── OPORTUNIDADES (D9.3) ───────────────────────────── -->
+        <div id="section-oportunidades" class="hidden fade-in">
+            <div class="section-header md:hidden">
+                <h1 class="text-lg font-black text-gray-900">Oportunidades</h1>
+                <p class="text-xs text-gray-500">A quién ofrecerle qué, hoy</p>
+            </div>
+            <div class="hidden md:block mb-5">
+                <h1 class="text-2xl font-black text-gray-900">Oportunidades</h1>
+                <p class="text-sm text-gray-500">Señales de venta de tus negocios, ordenadas por prioridad.</p>
+            </div>
+            <div id="oppList" class="space-y-3">
+                <p class="text-gray-400 text-sm">Cargando…</p>
+            </div>
+        </div>
+
+        <!-- ── MIS FICHAS ─────────────────────────────────────── -->
+        <div id="section-businesses" class="hidden fade-in">
+            <div class="section-header md:hidden flex items-center justify-between">
+                <div>
+                    <h1 class="text-lg font-black text-gray-900">Mis fichas</h1>
+                    <p class="text-xs text-gray-500">Fichas que cargaste</p>
+                </div>
+                <button onclick="openNuevaFichaModal()"
+                    class="touch-btn bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-brand-600 transition">
+                    <i class="fas fa-plus mr-1"></i> Nueva
+                </button>
+            </div>
+            <div class="hidden md:flex md:items-center justify-between mb-6">
+                <div>
+                    <h1 class="text-2xl font-black text-gray-900">Mis fichas</h1>
+                    <p class="text-gray-500 text-sm mt-1">Fichas que cargaste al directorio</p>
+                </div>
+                <button onclick="openNuevaFichaModal()"
+                    class="touch-btn bg-brand-500 text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-brand-600 transition flex items-center gap-2">
+                    <i class="fas fa-plus"></i> Cargar ficha
+                </button>
+            </div>
+
+            <!-- Filtro por estado -->
+            <div class="px-3 md:px-0 mb-3">
+                <select id="fichasStatusFilter" onchange="loadMyFichas(1)"
+                    class="border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-white focus:ring-2 focus:ring-brand-400">
+                    <option value="">Todas</option>
+                    <option value="draft">Borradores</option>
+                    <option value="pending">En revisión</option>
+                    <option value="published">Publicadas</option>
+                    <option value="rejected">Rechazadas</option>
+                </select>
+            </div>
+
+            <!-- Barra de envío por lote (aparece al seleccionar) -->
+            <div id="batchBar" class="hidden sticky top-16 z-30 mx-3 md:mx-0 mb-3 bg-brand-600 text-white rounded-xl px-4 py-3 flex items-center gap-3 shadow-lg">
+                <i class="fas fa-check-square text-brand-200"></i>
+                <span class="flex-1 text-sm font-bold" id="batchBarLabel">0 fichas seleccionadas</span>
+                <button onclick="submitBatch()"
+                    class="bg-white text-brand-700 text-xs font-black px-4 py-2 rounded-lg hover:bg-brand-50 transition">
+                    <i class="fas fa-paper-plane mr-1"></i>Enviar seleccionadas
+                </button>
+                <button onclick="toggleSelectAll(false);_selectedFichas.clear();updateBatchBar()"
+                    class="text-brand-200 hover:text-white text-xs font-medium">
+                    Cancelar
+                </button>
+            </div>
+
+            <div id="fichasList" class="px-3 md:px-0 space-y-3">
+                <p class="text-center text-gray-400 py-8"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando...</p>
+            </div>
+            <div class="flex items-center justify-between px-3 md:px-0 mt-4">
+                <p class="text-sm text-gray-500" id="fichasPaginationInfo"></p>
+                <div class="flex gap-1" id="fichasPaginationControls"></div>
+            </div>
+        </div>
+
+        <!-- ── EXPLORAR FICHAS ────────────────────────────────── -->
+        <div id="section-explorar" class="hidden fade-in">
+            <div class="section-header md:hidden flex items-center justify-between">
+                <div>
+                    <h1 class="text-lg font-black text-gray-900">Explorar fichas</h1>
+                    <p class="text-xs text-gray-500" id="availCount">Buscando...</p>
+                </div>
+            </div>
+            <div class="hidden md:flex md:items-center justify-between mb-4">
+                <div>
+                    <h1 class="text-2xl font-black text-gray-900">Explorar fichas</h1>
+                    <p class="text-gray-500 text-sm mt-1">
+                        <span id="availTotalGlobal">—</span> fichas incompletas disponibles
+                    </p>
+                </div>
+            </div>
+
+            <!-- Buscador global de fichas (#2) -->
+            <div class="px-3 md:px-0 mb-4">
+                <div class="relative">
+                    <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                    <input type="text" id="fichaSearchInput" placeholder="Buscar cualquier ficha por nombre…" autocomplete="off"
+                        class="w-full pl-11 pr-10 py-3 border border-gray-200 rounded-2xl text-sm focus:ring-2 focus:ring-brand-400 bg-white"
+                        oninput="onFichaSearchInput()">
+                    <button id="fichaSearchClear" onclick="clearFichaSearch()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 hidden">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Resultados de búsqueda global (según estado) -->
+            <div id="searchView" class="hidden">
+                <div class="px-3 md:px-0 mb-3 flex items-center justify-between gap-2">
+                    <p class="text-sm text-gray-600" id="searchSummary"></p>
+                    <button onclick="clearFichaSearch()" class="text-xs text-brand-600 hover:underline font-semibold shrink-0"><i class="fas fa-arrow-left mr-1"></i>Volver al pool</button>
+                </div>
+                <div id="searchResults" class="px-3 md:px-0 grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+                <div class="flex items-center justify-between px-3 md:px-0 mt-4 mb-6">
+                    <p class="text-sm text-gray-500" id="searchPaginationInfo"></p>
+                    <div class="flex gap-1" id="searchPaginationControls"></div>
+                </div>
+            </div>
+
+          <!-- ── POOL TOMABLE (Explorar) ── -->
+          <div id="availPoolView">
+            <!-- Info -->
+            <div class="px-3 md:px-0 mb-4">
+                <div class="bg-brand-50 border border-brand-100 rounded-xl px-4 py-3 text-sm text-brand-700 flex items-start gap-2">
+                    <i class="fas fa-info-circle mt-0.5 shrink-0"></i>
+                    <span>Fichas ya existentes en el directorio con datos incompletos. <strong>Tomá hasta 10 a la vez</strong>, completá la información y enviala a revisión. Una vez aprobada, el dueño puede reclamarla.</span>
+                </div>
+            </div>
+
+            <!-- Filtros: combobox ciudad + rubro + orden -->
+            <div class="px-3 md:px-0 mb-3 flex gap-2 flex-wrap items-end">
+                <!-- Combobox Ciudad -->
+                <div class="relative flex-1 min-w-[140px]">
+                    <i class="fas fa-map-marker-alt absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none z-10"></i>
+                    <input type="text" id="availCityInput" placeholder="Ciudad..."
+                        autocomplete="off"
+                        class="w-full pl-9 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-400 bg-white"
+                        oninput="availFilterCity()" onfocus="availOpenCity()" onblur="availCloseCity()">
+                    <button onclick="availClearCity()" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-xs">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <input type="hidden" id="availCityHidden">
+                    <div id="availCityList" class="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-gray-100 hidden z-50 max-h-52 overflow-y-auto"></div>
+                </div>
+                <!-- Combobox Rubro -->
+                <div class="relative flex-1 min-w-[140px]">
+                    <i class="fas fa-tag absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none z-10"></i>
+                    <input type="text" id="availCatInput" placeholder="Rubro..."
+                        autocomplete="off"
+                        class="w-full pl-9 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-400 bg-white"
+                        oninput="availFilterCat()" onfocus="availOpenCat()" onblur="availCloseCat()">
+                    <button onclick="availClearCat()" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-xs">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <input type="hidden" id="availCatHidden">
+                    <div id="availCatList" class="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-gray-100 hidden z-50 max-h-52 overflow-y-auto"></div>
+                </div>
+                <!-- Toggle orden -->
+                <div class="flex gap-0.5 bg-gray-100 rounded-xl p-0.5 shrink-0 flex-wrap">
+                    <button id="btnOrder-asc" onclick="setAvailOrder('asc')"
+                        class="text-xs font-bold px-3 py-2 rounded-lg bg-brand-500 text-white transition" title="Más incompletas primero">
+                        <i class="fas fa-arrow-up mr-1"></i>Incompletas
+                    </button>
+                    <button id="btnOrder-desc" onclick="setAvailOrder('desc')"
+                        class="text-xs font-bold px-3 py-2 rounded-lg bg-white text-gray-600 transition" title="Más completas primero">
+                        <i class="fas fa-arrow-down mr-1"></i>Completas
+                    </button>
+                    <button id="btnOrder-views_desc" onclick="setAvailOrder('views_desc')"
+                        class="text-xs font-bold px-3 py-2 rounded-lg bg-white text-gray-600 transition" title="Más visitadas primero (30d)">
+                        <i class="fas fa-eye mr-1"></i>Más vistas
+                    </button>
+                    <button id="btnOrder-views_asc" onclick="setAvailOrder('views_asc')"
+                        class="text-xs font-bold px-3 py-2 rounded-lg bg-white text-gray-600 transition" title="Menos visitadas primero (30d)">
+                        <i class="fas fa-eye-low-vision mr-1"></i>Menos vistas
+                    </button>
+                </div>
+            </div>
+
+            <!-- Barra de lote (aparece al seleccionar) -->
+            <div id="availBatchBar" class="hidden sticky top-16 z-30 mx-3 md:mx-0 mb-3 bg-brand-600 text-white rounded-xl px-4 py-3 flex items-center gap-3 shadow-lg">
+                <i class="fas fa-check-square text-brand-200"></i>
+                <span class="flex-1 text-sm font-bold" id="availBatchLabel">0/10 fichas</span>
+                <button id="btnTakeBatch" onclick="takeBatch()"
+                    class="bg-white text-brand-700 text-xs font-black px-4 py-2 rounded-lg hover:bg-brand-50 transition">
+                    <i class="fas fa-hand-pointer mr-1"></i>Tomar seleccionadas
+                </button>
+                <button onclick="_selectedAvail.clear();document.querySelectorAll('.avail-check').forEach(c=>c.checked=false);updateAvailBatchBar()"
+                    class="text-brand-200 hover:text-white text-xs">
+                    Cancelar
+                </button>
+            </div>
+
+            <!-- Grid de fichas -->
+            <div id="availableList" class="px-3 md:px-0 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="col-span-2 text-center py-8 text-gray-400">
+                    <i class="fas fa-spinner fa-spin text-2xl mb-2 block"></i>Cargando...
+                </div>
+            </div>
+
+            <!-- Paginación -->
+            <div class="flex items-center justify-between px-3 md:px-0 mt-4 mb-6">
+                <p class="text-sm text-gray-500" id="availPaginationInfo"></p>
+                <div class="flex gap-1" id="availPaginationControls"></div>
+            </div>
+          </div><!-- /availPoolView -->
+        </div>
+
+        <!-- ── NUEVA FICHA (sección vacía — abre modal) ─────── -->
+        <div id="section-nueva" class="hidden fade-in"></div>
+
+    </main>
+</div>
+
+<!-- ── BOTTOM NAV (mobile) ─────────────────────────────────────────────── -->
+<nav id="bottomNav">
+    <button class="bnav-item active" id="bnav-dashboard" onclick="showSection('dashboard')">
+        <i class="fas fa-chart-line"></i>
+        <span>Inicio</span>
+    </button>
+    <button class="bnav-item" id="bnav-oportunidades" onclick="showSection('oportunidades')">
+        <i class="fas fa-bullseye"></i>
+        <span>Oportun.</span>
+        <span class="bnav-badge hidden" id="oppBadgeMobile"></span>
+    </button>
+    <button class="bnav-item" id="bnav-businesses" onclick="showSection('businesses')">
+        <i class="fas fa-building"></i>
+        <span>Mis fichas</span>
+        <span class="bnav-badge hidden" id="bnavPendingBadgeMobile"></span>
+    </button>
+    <button class="bnav-item" id="bnav-explorar" onclick="showSection('explorar')">
+        <i class="fas fa-search"></i>
+        <span>Explorar</span>
+    </button>
+    <button class="bnav-item" id="bnav-nueva" onclick="openNuevaFichaModal()">
+        <i class="fas fa-plus-circle"></i>
+        <span>Cargar</span>
+    </button>
+</nav>
+
+<!-- ── TOAST ─────────────────────────────────────────────────────────────── -->
+<div id="clientToast" class="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[100] hidden pointer-events-none">
+    <div class="bg-gray-900 text-white text-sm px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2" id="clientToastMsg"></div>
+</div>
+
+<script>
+function toggleDarkMode() {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('retopa_dark', isDark ? '1' : '0');
+}
+</script>
+
+<script src="/embajador/js/config.js"></script>
+<script src="/embajador/js/dashboard.js"></script>
+<script src="/embajador/js/opportunities.js"></script>
+<script src="/embajador/js/search.js"></script>
+<script src="/embajador/js/businesses.js"></script>
+<script src="/embajador/js/explorar.js"></script>
+<script src="/embajador/js/app.js"></script>
+</body>
+</html>

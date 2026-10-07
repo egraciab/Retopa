@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="es" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>Mi Panel — RetoPA</title>
+    <link rel="stylesheet" href="/public/css/main.css">
+    <script>
+        if (localStorage.getItem('retopa_dark') === '1') document.documentElement.classList.add('dark');
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --bottom-nav-h: 64px; }
+
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        body { background: #f1f5f9; font-family: 'Inter', system-ui, sans-serif; overscroll-behavior-y: contain; }
+        html.dark body { background: #0f172a; }
+        html.dark { color-scheme: dark; }
+
+        /* ── Bottom nav (mobile only) ─────────────────────────── */
+        #bottomNav {
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+            height: var(--bottom-nav-h);
+            background: white;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            padding-bottom: env(safe-area-inset-bottom);
+            box-shadow: 0 -4px 20px rgba(0,0,0,.07);
+        }
+        html.dark #bottomNav { background: #1e293b; border-color: #334155; }
+        .bnav-item {
+            flex: 1; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 3px; font-size: 10px; font-weight: 600;
+            color: #94a3b8; cursor: pointer; transition: color .15s; padding: 4px 0;
+            position: relative; border: none; background: none;
+        }
+        .bnav-item i { font-size: 18px; transition: transform .2s; }
+        .bnav-item.active { color: #0ea5e9; }
+        .bnav-item.active i { transform: translateY(-2px); }
+        html.dark .bnav-item { color: #475569; }
+        html.dark .bnav-item.active { color: #38bdf8; }
+        .bnav-badge {
+            position: absolute; top: 6px; right: calc(50% - 16px);
+            background: #ef4444; color: white; border-radius: 99px;
+            font-size: 9px; font-weight: 700; min-width: 16px; height: 16px;
+            display: flex; align-items: center; justify-content: center; padding: 0 4px;
+        }
+
+        /* ── Desktop sidebar ──────────────────────────────────── */
+        .sidebar-item { transition: all .15s; border-radius: 10px; }
+        .sidebar-item:hover, .sidebar-item.active { background: #e0f2fe; color: #0284c7; }
+        .sidebar-item.active { font-weight: 700; }
+        html.dark .sidebar-item:hover, html.dark .sidebar-item.active { background: #1e3a5f; color: #38bdf8; }
+
+        /* ── Layout ───────────────────────────────────────────── */
+        #mainContent {
+            padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 16px);
+        }
+        @media (min-width: 768px) {
+            #bottomNav { display: none; }
+            #desktopSidebar { display: block; }
+            #mainContent { padding-bottom: 2rem; }
+        }
+
+        /* ── Cards / UI ───────────────────────────────────────── */
+        .stat-card { background: white; border-radius: 16px; border: 1px solid #f1f5f9; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+        html.dark .stat-card { background: #1e293b; border-color: #334155; }
+        .fade-in { animation: fadeIn .25s ease; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:none } }
+        .chart-bar { background: linear-gradient(to top, #0ea5e9, #38bdf8); border-radius: 4px 4px 0 0; }
+        html.dark .chart-bar { background: linear-gradient(to top, #0369a1, #0ea5e9); }
+
+        /* ── Mobile section header ────────────────────────────── */
+        .section-header {
+            position: sticky; top: 0; z-index: 20;
+            background: #f1f5f9; padding: 12px 16px 8px;
+            border-bottom: 1px solid transparent;
+        }
+        html.dark .section-header { background: #0f172a; }
+
+        /* ── Pull-to-refresh hint ─────────────────────────────── */
+        .scroll-area { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+        /* ── Touch targets ────────────────────────────────────── */
+        .touch-btn { min-height: 44px; min-width: 44px; }
+
+        /* ── Dark mode overrides ──────────────────────────────── */
+        html.dark .bg-white { background-color: #1e293b !important; }
+        html.dark .bg-gray-50 { background-color: #0f172a !important; }
+        html.dark .bg-gray-100 { background-color: #1e293b !important; }
+        html.dark .border-gray-100 { border-color: #334155 !important; }
+        html.dark .border-gray-200 { border-color: #475569 !important; }
+        html.dark .text-gray-900 { color: #f1f5f9 !important; }
+        html.dark .text-gray-700 { color: #cbd5e1 !important; }
+        html.dark .text-gray-600 { color: #94a3b8 !important; }
+        html.dark .text-gray-500 { color: #64748b !important; }
+        html.dark .text-gray-400 { color: #475569 !important; }
+        html.dark nav { background-color: #1e293b !important; border-color: #334155 !important; }
+        html.dark input, html.dark textarea, html.dark select {
+            background-color: #0f172a !important;
+            border-color: #475569 !important;
+            color: #f1f5f9 !important;
+        }
+        html.dark input::placeholder, html.dark textarea::placeholder { color: #64748b !important; }
+
+        /* ── Modal bottom-sheet on mobile ─────────────────────── */
+        @media (max-width: 767px) {
+            .modal-sheet > .modal-inner {
+                position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important;
+                top: auto !important; max-height: 92dvh !important;
+                border-radius: 20px 20px 0 0 !important;
+                transform: translateY(100%); transition: transform .3s cubic-bezier(.4,0,.2,1);
+                width: 100% !important; max-width: 100% !important;
+            }
+            .modal-sheet.open > .modal-inner { transform: translateY(0); }
+            .modal-sheet > .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); }
+            .modal-drag-handle {
+                width: 36px; height: 4px; background: #e2e8f0;
+                border-radius: 2px; margin: 10px auto 4px; flex-shrink: 0;
+            }
+            html.dark .modal-drag-handle { background: #475569; }
+        }
+        @media (min-width: 768px) {
+            .modal-sheet > .modal-inner {
+                max-width: 680px; width: 100%; max-height: 90vh;
+            }
+            .modal-drag-handle { display: none; }
+        }
+
+        /* ── Swipe tabs (mobile) ──────────────────────────────── */
+        .mobile-tabs {
+            display: flex; gap: 0; overflow-x: auto; scrollbar-width: none;
+            padding: 0 16px; border-bottom: 1px solid #e2e8f0;
+        }
+        .mobile-tabs::-webkit-scrollbar { display: none; }
+        html.dark .mobile-tabs { border-color: #334155; }
+        .mobile-tab {
+            flex-shrink: 0; padding: 10px 16px; font-size: 13px; font-weight: 600;
+            color: #94a3b8; border-bottom: 2px solid transparent; white-space: nowrap;
+            cursor: pointer; transition: all .15s;
+        }
+        .mobile-tab.active { color: #0ea5e9; border-bottom-color: #0ea5e9; }
+
+        /* ── Empresa card mobile ──────────────────────────────── */
+        .biz-mobile-card {
+            background: white; border-radius: 16px; border: 1px solid #e2e8f0;
+            overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        }
+        html.dark .biz-mobile-card { background: #1e293b; border-color: #334155; }
+    </style>
+  <!-- Cropper.js para crop interactivo de imágenes -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
+</head>
+<body>
+
+<!-- ── TOP NAV ─────────────────────────────────────────────────────── -->
+<nav class="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 h-14 md:h-16 flex items-center justify-between gap-3">
+
+        <!-- Logo -->
+        <a href="/" class="flex items-center gap-2 shrink-0">
+            <div class="w-8 h-8 rounded-xl flex items-center justify-center" style="background:linear-gradient(135deg,#1B3A6B,#2a5298)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <circle cx="10" cy="10" r="6" stroke="#7EC8E3" stroke-width="2.2"/>
+                    <line x1="14.8" y1="14.8" x2="20" y2="20" stroke="#7EC8E3" stroke-width="2.2" stroke-linecap="round"/>
+                    <circle cx="10" cy="10" r="2" fill="#E8B84B"/>
+                    <line x1="10" y1="12" x2="10" y2="15" stroke="#E8B84B" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+            </div>
+            <div class="hidden sm:block">
+                <div class="font-black text-gray-900 text-base leading-none">Reto<span style="color:#E8B84B">PA</span></div>
+                <div class="text-[8px] font-semibold tracking-widest uppercase" style="color:#7EC8E3">Mi Panel</div>
+            </div>
+        </a>
+
+        <!-- Center: selector de empresa maestro — visible en mobile y desktop -->
+        <div class="flex-1 min-w-0 flex justify-center relative">
+            <button id="navBizBtn" onclick="toggleNavBizDropdown()"
+                title="Cambiar empresa activa"
+                class="flex items-center gap-2 max-w-[260px] px-3 py-1.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-brand-300 transition active:bg-gray-100 shadow-sm">
+                <img id="navBizLogo" class="w-6 h-6 rounded-md object-cover flex-shrink-0 hidden" src="" onerror="this.classList.add('hidden')">
+                <div class="flex flex-col items-start min-w-0">
+                    <span class="text-[9px] text-gray-400 font-semibold uppercase tracking-wide leading-none hidden sm:block">Empresa activa</span>
+                    <span id="navBizLabel" class="text-sm font-bold text-gray-800 truncate leading-tight"></span>
+                </div>
+                <i class="fas fa-chevron-down text-[10px] text-gray-400 flex-shrink-0" id="navBizChevron"></i>
+            </button>
+            <!-- Dropdown -->
+            <div id="navBizDropdown" class="hidden absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 min-w-[220px] overflow-hidden">
+                <div class="px-4 pt-3 pb-1.5">
+                    <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Mis empresas</p>
+                </div>
+                <div id="navBizList" class="pb-2"></div>
+            </div>
+        </div>
+
+        <!-- Right actions -->
+        <div class="flex items-center gap-2 shrink-0">
+            <!-- Dark mode -->
+            <button onclick="toggleDarkMode()" class="touch-btn w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 transition">
+                <i class="fas fa-moon text-sm dark:hidden"></i>
+                <i class="fas fa-sun text-sm hidden dark:inline text-amber-400"></i>
+            </button>
+            <!-- Volver (desktop only) -->
+            <a href="/" class="hidden md:flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+                <i class="fas fa-arrow-left text-xs"></i> Directorio
+            </a>
+            <!-- User menu -->
+            <div class="relative group">
+                <button class="touch-btn flex items-center gap-1.5 px-2 py-1.5 rounded-xl hover:bg-gray-100 transition">
+                    <div class="w-8 h-8 bg-brand-100 rounded-full flex items-center justify-center text-brand-600 font-bold text-sm" id="navAvatar">?</div>
+                    <span class="hidden sm:block text-sm font-medium text-gray-700 max-w-[100px] truncate" id="navName">...</span>
+                    <i class="fas fa-chevron-down text-xs text-gray-400"></i>
+                </button>
+                <div class="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-gray-100 hidden group-hover:block z-50 overflow-hidden">
+                    <a href="/" class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-arrow-left text-gray-400 w-4"></i> Volver al directorio
+                    </a>
+                    <button onclick="showSection('settings')" class="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                        <i class="fas fa-cog text-gray-400 w-4"></i> Mi cuenta
+                    </button>
+                    <div class="border-t border-gray-100"></div>
+                    <button onclick="clientLogout()" class="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
+                        <i class="fas fa-sign-out-alt w-4"></i> Cerrar sesión
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- ── MAIN LAYOUT ─────────────────────────────────────────────────── -->
+<div class="flex max-w-7xl mx-auto md:px-4 md:py-8 md:gap-8">
+
+    <!-- SIDEBAR (desktop only) -->
+    <aside id="desktopSidebar" class="hidden md:block w-56 shrink-0">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 sticky top-24">
+            <nav class="space-y-1">
+                <button onclick="showSection('dashboard')" id="nav-dashboard"
+                    class="sidebar-item active w-full text-left flex items-center gap-3 px-4 py-3 text-sm text-gray-700">
+                    <i class="fas fa-chart-line w-4 text-brand-500"></i> Dashboard
+                </button>
+                <button onclick="showSection('businesses')" id="nav-businesses"
+                    class="sidebar-item w-full text-left flex items-center gap-3 px-4 py-3 text-sm text-gray-700">
+                    <i class="fas fa-building w-4 text-gray-400"></i> Mis empresas
+                </button>
+                <button onclick="showSection('promotions')" id="nav-promotions"
+                    class="sidebar-item w-full text-left flex items-center gap-3 px-4 py-3 text-sm text-gray-700">
+                    <i class="fas fa-fire w-4 text-orange-500"></i> Promociones
+                </button>
+                <button onclick="showSection('reviews')" id="nav-reviews"
+                    class="sidebar-item w-full text-left flex items-center gap-3 px-4 py-3 text-sm text-gray-700">
+                    <i class="fas fa-star w-4 text-gray-400"></i> Reseñas
+                </button>
+                <button onclick="showSection('settings')" id="nav-settings"
+                    class="sidebar-item w-full text-left flex items-center gap-3 px-4 py-3 text-sm text-gray-700">
+                    <i class="fas fa-cog w-4 text-gray-400"></i> Mi cuenta
+                </button>
+                <button onclick="showSection('hepta')" id="nav-hepta"
+                    class="sidebar-item w-full text-left flex items-center gap-3 px-4 py-3 text-sm text-gray-700">
+                    <i class="fas fa-cloud w-4 text-indigo-500"></i> Mi sistema
+                </button>
+                <div class="border-t border-gray-100 my-1"></div>
+                <a href="/" onclick="sessionStorage.setItem('openRegistro','1')"
+                    class="sidebar-item w-full text-left flex items-center gap-3 px-4 py-3 text-sm text-brand-600 font-bold">
+                    <i class="fas fa-plus-circle w-4 text-brand-500"></i> Registrar empresa
+                </a>
+            </nav>
+            <div class="mt-4 pt-4 border-t border-gray-100 px-4">
+                <div id="planBadge" class="text-center"></div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 min-w-0" id="mainContent">
+
+        <!-- ── DASHBOARD ─────────────────────────────────────── -->
+        <div id="section-dashboard" class="fade-in">
+
+            <!-- Mobile header -->
+            <div class="section-header md:hidden flex items-center justify-between">
+                <div>
+                    <h1 class="text-lg font-black text-gray-900">Dashboard</h1>
+                    <p class="text-xs text-gray-500" id="dashSubtitle">Cargando...</p>
+                </div>
+                <button id="tourReplayBtnM" onclick="startPortalTour()"
+                    class="flex items-center gap-1.5 text-xs font-bold text-brand-600 bg-brand-50 px-3 py-1.5 rounded-lg">
+                    <i class="fas fa-circle-question"></i> Ver tour
+                </button>
+            </div>
+            <!-- Desktop header -->
+            <div class="hidden md:flex md:items-center md:justify-between mb-6 px-0">
+                <div>
+                    <h1 class="text-2xl font-black text-gray-900">Dashboard</h1>
+                    <p class="text-gray-500 text-sm mt-1" id="dashSubtitleDesktop">Últimos 30 días</p>
+                </div>
+                <button id="tourReplayBtn" onclick="startPortalTour()"
+                    class="flex items-center gap-2 text-sm font-bold text-brand-600 bg-brand-50 hover:bg-brand-100 px-4 py-2 rounded-xl transition">
+                    <i class="fas fa-circle-question"></i> Ver tour guiado
+                </button>
+            </div>
+
+            <div class="px-3 md:px-0 pt-3 md:pt-0 space-y-4">
+                <!-- KPIs — 2 cols mobile, 4 desktop -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="kpiGrid">
+                    <div class="stat-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center"><i class="fas fa-eye text-blue-500 text-sm"></i></div>
+                            <span class="text-[10px] text-gray-400">Total histórico</span>
+                        </div>
+                        <p class="text-2xl font-black text-gray-900" id="kpiViews">—</p>
+                        <p class="text-xs text-gray-500 mt-0.5">Visitas a tu ficha</p>
+                    </div>
+                    <div class="stat-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="w-9 h-9 bg-green-50 rounded-xl flex items-center justify-center"><i class="fab fa-whatsapp text-green-500 text-sm"></i></div>
+                            <span class="text-[10px] text-gray-400">Total histórico</span>
+                        </div>
+                        <p class="text-2xl font-black text-gray-900" id="kpiWhatsapp">—</p>
+                        <p class="text-xs text-gray-500 mt-0.5">Clics WhatsApp</p>
+                    </div>
+                    <div class="stat-card p-4">
+                        <div class="w-9 h-9 bg-red-50 rounded-xl flex items-center justify-center mb-2"><i class="fas fa-heart text-red-400 text-sm"></i></div>
+                        <p class="text-2xl font-black text-gray-900" id="kpiLikes">—</p>
+                        <p class="text-xs text-gray-500 mt-0.5">Me gusta</p>
+                    </div>
+                    <div class="stat-card p-4">
+                        <div class="flex items-center justify-between mb-1">
+                            <div class="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center"><i class="fas fa-star text-amber-400 text-sm"></i></div>
+                            <span class="text-[10px] text-gray-400">Promedio</span>
+                        </div>
+                        <p class="text-2xl font-black text-gray-900" id="kpiRating">—</p>
+                        <p class="text-xs text-gray-500 mt-0.5">Rating</p>
+                        <div id="kpiRatingBreakdown" class="mt-2 space-y-0.5 hidden"></div>
+                    </div>
+                </div>
+
+                <!-- Gráfico visitas -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-bold text-gray-900 text-sm" id="chartTitle">Visitas — últimos 30 días</h3>
+                        <span id="chartPeriodBadge" class="text-[10px] bg-brand-50 text-brand-600 font-bold px-2 py-0.5 rounded-lg hidden"></span>
+                    </div>
+                    <div id="viewsChart" class="flex items-end gap-[2px] w-full" style="height:90px;">
+                        <p class="text-sm text-gray-400 self-center w-full text-center">Cargando...</p>
+                    </div>
+                </div>
+
+                <!-- Empresa activa -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4" id="dashBizCard">
+                    <p class="text-sm text-gray-400 text-center py-2">Cargando...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── MIS EMPRESAS ──────────────────────────────────── -->
+        <div id="section-businesses" class="hidden fade-in">
+            <div class="section-header md:hidden flex items-center justify-between">
+                <div>
+                    <h1 class="text-lg font-black text-gray-900">Mis empresas</h1>
+                    <p class="text-xs text-gray-500">Gestioná tu información</p>
+                </div>
+                <button id="bizGuideBtnM" onclick="startPortalTour('businesses')"
+                    class="flex items-center gap-1.5 text-xs font-bold text-brand-600 bg-brand-50 px-3 py-1.5 rounded-lg">
+                    <i class="fas fa-circle-question"></i> Ver guía
+                </button>
+            </div>
+            <div class="hidden md:flex md:items-center md:justify-between mb-6">
+                <div>
+                    <h1 class="text-2xl font-black text-gray-900">Mis empresas</h1>
+                    <p class="text-gray-500 text-sm mt-1">Gestioná y editá la información de tus empresas</p>
+                </div>
+                <button id="bizGuideBtn" onclick="startPortalTour('businesses')"
+                    class="flex items-center gap-2 text-sm font-bold text-brand-600 bg-brand-50 hover:bg-brand-100 px-4 py-2 rounded-xl transition">
+                    <i class="fas fa-circle-question"></i> Ver guía
+                </button>
+            </div>
+            <div id="bizList" class="px-3 md:px-0 pt-3 md:pt-0 space-y-4">
+                <p class="text-center text-gray-400 py-8"><i class="fas fa-spinner fa-spin mr-2"></i> Cargando...</p>
+            </div>
+        </div>
+
+        <!-- ── HEPTA CLOUD ──────────────────────────────────── -->
+        <div id="section-hepta" class="hidden fade-in">
+            <div class="section-header md:hidden flex items-center justify-between">
+                <div>
+                    <h1 class="text-lg font-black text-gray-900">Mi sistema</h1>
+                    <p class="text-xs text-gray-500">Gestioná tu negocio con Hepta Cloud</p>
+                </div>
+            </div>
+            <div class="hidden md:block mb-6">
+                <h1 class="text-2xl font-black text-gray-900">Mi sistema</h1>
+                <p class="text-gray-500 text-sm mt-1">Gestioná tu negocio con Hepta Cloud</p>
+            </div>
+            <div id="heptaContent" class="px-3 md:px-0 pt-3 md:pt-0">
+                <p class="text-center text-gray-400 py-8"><i class="fas fa-spinner fa-spin mr-2"></i> Cargando...</p>
+            </div>
+        </div>
+
+        <!-- ── RESEÑAS ─────────────────────────────────────── -->
+        <!-- Sección Promociones -->
+        <div id="section-promotions" class="hidden fade-in p-4 md:p-6">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h1 class="text-lg font-black text-gray-900 flex items-center gap-2">
+                        <i class="fas fa-fire text-orange-500"></i> Promociones
+                    </h1>
+                    <p class="text-xs text-gray-500 mt-0.5">Creá ofertas y destacalas en RetoPA</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="promoGuideBtn" onclick="startPortalTour('promotions')"
+                        class="flex items-center gap-1.5 text-xs md:text-sm font-bold text-brand-600 bg-brand-50 hover:bg-brand-100 px-3 md:px-4 py-2 rounded-xl transition">
+                        <i class="fas fa-circle-question"></i> Ver guía
+                    </button>
+                    <button id="newPromoBtn" onclick="openNewPromoModal()" class="hidden"
+                        style="background:#1B3A6B;color:white;border:2px solid #1B3A6B"
+                        class="px-4 py-2 rounded-xl text-sm font-bold hover:opacity-90 transition flex items-center gap-2">
+                        <i class="fas fa-plus"></i> Nueva promoción
+                    </button>
+                    <button onclick="loadPromotions()" title="Actualizar"
+                        style="width:36px;height:36px;border-radius:10px;border:1.5px solid #e2e8f0;background:white;cursor:pointer;color:#64748b;font-size:14px;display:flex;align-items:center;justify-content:center">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="promosList">
+                <div class="text-center py-12 text-gray-400">
+                    <i class="fas fa-spinner fa-spin text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <div id="section-reviews" class="hidden fade-in">
+            <div class="section-header md:hidden">
+                <h1 class="text-lg font-black text-gray-900">Reseñas</h1>
+                <p class="text-xs text-gray-500">Reseñas de tus clientes</p>
+            </div>
+            <div class="hidden md:flex md:items-center justify-between mb-6">
+                <div>
+                    <h1 class="text-2xl font-black text-gray-900">Reseñas</h1>
+                    <p class="text-gray-500 text-sm mt-1">Reseñas que recibieron tus empresas</p>
+                </div>
+            </div>
+            <!-- Filtros como tabs en mobile -->
+            <div class="md:hidden mt-2 px-3 pt-2">
+                <!-- Tabs de rating -->
+                <div class="mobile-tabs -mx-3">
+                    <div class="mobile-tab active" onclick="setReviewTab('all', this)">Todas</div>
+                    <div class="mobile-tab" onclick="setReviewTab('5', this)">★★★★★</div>
+                    <div class="mobile-tab" onclick="setReviewTab('4', this)">★★★★</div>
+                    <div class="mobile-tab" onclick="setReviewTab('max3', this)">★★★ o menos</div>
+                </div>
+            </div>
+            <!-- Filtro de valoraciones desktop -->
+            <div class="hidden md:flex items-center gap-2 mb-4">
+                <select id="reviewsRatingFilter" onchange="filterReviews()"
+                    class="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white text-gray-700 focus:ring-2 focus:ring-brand-400">
+                    <option value="">Todas las valoraciones</option>
+                    <option value="5">★★★★★</option>
+                    <option value="4">★★★★</option>
+                    <option value="3">★★★ o menos</option>
+                </select>
+            </div>
+            <div id="reviewsList" class="px-3 md:px-0 pt-3 md:pt-0 space-y-3">
+                <p class="text-center text-gray-400 py-8"><i class="fas fa-spinner fa-spin mr-2"></i> Cargando...</p>
+            </div>
+        </div>
+
+        <!-- ── MI CUENTA ─────────────────────────────────────── -->
+
+        <div id="section-settings" class="hidden fade-in">
+            <div class="section-header md:hidden">
+                <h1 class="text-lg font-black text-gray-900">Mi cuenta</h1>
+                <p class="text-xs text-gray-500">Tus datos personales</p>
+            </div>
+            <div class="hidden md:block mb-6">
+                <h1 class="text-2xl font-black text-gray-900">Mi cuenta</h1>
+                <p class="text-gray-500 text-sm mt-1">Actualizá tu información personal</p>
+            </div>
+            <div class="px-3 md:px-0 pt-3 md:pt-0 grid md:grid-cols-2 gap-4">
+                <!-- Datos personales -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                    <h3 class="font-bold text-gray-900 mb-4 flex items-center gap-2 text-sm md:text-base">
+                        <i class="fas fa-user text-brand-500"></i> Datos personales
+                    </h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nombre completo</label>
+                            <input type="text" id="settingName" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                            <input type="email" id="settingEmail" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm bg-gray-50" disabled>
+                            <p class="text-xs text-gray-400 mt-1">El email no se puede cambiar</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                            <input type="tel" id="settingPhone" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400">
+                        </div>
+                        <!-- Ciudad del usuario (combobox) -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                <i class="fas fa-map-marker-alt text-gray-400 mr-1"></i> Ciudad
+                            </label>
+                            <div class="relative" id="settingCityWrapper">
+                                <input type="text" id="settingCityInput" placeholder="Escribí tu ciudad..."
+                                    autocomplete="off"
+                                    class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400"
+                                    oninput="filterSettingCity()" onfocus="openSettingCity()" onblur="setTimeout(closeSettingCity, 180)">
+                                <input type="hidden" id="settingCityValue">
+                                <div id="settingCityList" class="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-gray-100 hidden z-50 max-h-48 overflow-y-auto"></div>
+                            </div>
+                        </div>
+                        <button onclick="saveSettings()" class="touch-btn w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-3 rounded-xl transition flex items-center justify-center gap-2 text-sm">
+                            <i class="fas fa-save"></i> Guardar cambios
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Cambiar contraseña -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                    <h3 class="font-bold text-gray-900 mb-4 flex items-center gap-2 text-sm md:text-base">
+                        <i class="fas fa-lock text-brand-500"></i> Cambiar contraseña
+                    </h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Contraseña actual</label>
+                            <input type="password" id="currentPass" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nueva contraseña</label>
+                            <input type="password" id="newPass" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Confirmar nueva contraseña</label>
+                            <input type="password" id="confirmPass" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400">
+                        </div>
+                        <div id="passError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2"></div>
+                        <button onclick="changePassword()" class="touch-btn w-full border-2 border-brand-500 text-brand-600 font-bold py-3 rounded-xl hover:bg-brand-50 transition flex items-center justify-center gap-2 text-sm">
+                            <i class="fas fa-key"></i> Cambiar contraseña
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2FA — full width -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 md:col-span-2">
+                    <h3 class="font-bold text-gray-900 mb-1 flex items-center gap-2 text-sm md:text-base">
+                        <i class="fas fa-shield-alt text-brand-500"></i> Verificación en dos pasos (2FA)
+                    </h3>
+                    <p class="text-xs text-gray-500 mb-4">Recibís un código por email cada vez que iniciás sesión. Agrega una capa extra de seguridad a tu cuenta.</p>
+                    <div id="mfaStatus" class="flex items-center justify-between p-4 bg-gray-50 rounded-xl mb-4">
+                        <div class="flex items-center gap-3">
+                            <div id="mfaStatusIcon" class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                                <i class="fas fa-shield-alt text-gray-400"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-bold text-gray-900" id="mfaStatusText">Cargando...</p>
+                                <p class="text-xs text-gray-500" id="mfaStatusSub"></p>
+                            </div>
+                        </div>
+                        <button id="mfaToggleBtn" onclick="initMfaFlow()" class="touch-btn text-sm font-bold px-4 py-2 rounded-xl transition hidden">
+                        </button>
+                    </div>
+                    <!-- Flujo de verificación (oculto hasta que se inicia) -->
+                    <div id="mfaVerifyFlow" class="hidden space-y-3 border border-brand-100 bg-brand-50 rounded-xl p-4">
+                        <p class="text-sm text-brand-700 font-medium" id="mfaFlowMsg">Enviamos un código a tu email.</p>
+                        <div class="flex gap-2">
+                            <input type="text" id="mfaOtpInput" maxlength="6" placeholder="Código de 6 dígitos"
+                                class="flex-1 border border-brand-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-brand-400 text-center tracking-widest text-lg font-bold"
+                                oninput="this.value=this.value.replace(/\D/g,'')">
+                            <button onclick="confirmMfaFlow()" class="touch-btn bg-brand-500 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-brand-600 transition">
+                                Verificar
+                            </button>
+                        </div>
+                        <button onclick="cancelMfaFlow()" class="text-xs text-gray-500 hover:text-gray-700">Cancelar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<!-- ── BOTTOM NAV (mobile) ─────────────────────────────────────────── -->
+<nav id="bottomNav">
+    <button class="bnav-item active" id="bnav-dashboard" onclick="showSection('dashboard')">
+        <i class="fas fa-chart-line"></i>
+        <span>Inicio</span>
+    </button>
+    <button class="bnav-item" id="bnav-businesses" onclick="showSection('businesses')">
+        <i class="fas fa-building"></i>
+        <span>Empresas</span>
+    </button>
+    <button class="bnav-item" id="bnav-reviews" onclick="showSection('reviews')">
+        <i class="fas fa-star"></i>
+        <span>Reseñas</span>
+        <span class="bnav-badge hidden" id="bnavReviewsBadge"></span>
+    </button>
+    <button class="bnav-item" id="bnav-settings" onclick="showSection('settings')">
+        <i class="fas fa-cog"></i>
+        <span>Cuenta</span>
+    </button>
+    <button class="bnav-item" id="bnav-promotions" onclick="showSection('promotions')">
+        <i class="fas fa-fire"></i>
+        <span>Promos</span>
+    </button>
+</nav>
+
+<!-- ── MODAL EDITAR EMPRESA (bottom-sheet en mobile) ──────────────── -->
+<div id="editBizModal" class="modal-sheet fixed inset-0 z-50 hidden">
+    <div class="modal-backdrop absolute inset-0 bg-black/50" onclick="closeEditModal()"></div>
+    <div class="modal-inner absolute bg-white w-full max-h-[90vh] overflow-y-auto z-10 rounded-2xl md:relative md:mx-auto md:my-8 md:rounded-2xl md:shadow-2xl">
+        <div class="modal-drag-handle md:hidden"></div>
+        <div class="sticky top-0 bg-white border-b border-gray-100 px-5 py-3.5 flex justify-between items-center z-10">
+            <h3 class="font-bold text-gray-900 flex items-center gap-2 text-sm">
+                <i class="fas fa-edit text-brand-500"></i> Editar empresa
+            </h3>
+            <button onclick="closeEditModal()" class="touch-btn w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
+                <i class="fas fa-times text-xs"></i>
+            </button>
+        </div>
+
+        <!-- Tabs del modal (mobile-friendly) -->
+        <div class="mobile-tabs">
+            <div class="mobile-tab active" onclick="switchEditTab('general', this)"><i class="fas fa-info-circle mr-1"></i> General</div>
+            <div class="mobile-tab" onclick="switchEditTab('media', this)"><i class="fas fa-image mr-1"></i> Imágenes</div>
+            <div class="mobile-tab" onclick="switchEditTab('contact', this)"><i class="fas fa-phone mr-1"></i> Contacto</div>
+            <div class="mobile-tab" onclick="switchEditTab('social', this)"><i class="fas fa-share-alt mr-1"></i> Redes</div>
+            <div class="mobile-tab" onclick="switchEditTab('location', this)"><i class="fas fa-map-marker-alt mr-1"></i> Ubicación</div>
+        </div>
+
+        <div class="p-4 md:p-6 space-y-4" id="editBizForm">
+
+            <!-- TAB: General -->
+            <div id="editTab-general" class="edit-tab-panel space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre Comercial / Marca *</label>
+                    <input type="text" id="editTradeName" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400" placeholder="Ej: Panadería Pinocho">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Razón Social / Nombre legal</label>
+                    <input type="text" id="editLegalName" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                    <textarea id="editDesc" rows="3" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400" placeholder="Describí tu empresa..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Texto de tu Kit QR <span class="text-gray-400 font-normal text-xs">(opcional — el que va impreso arriba del QR)</span></label>
+                    <input type="text" id="editKitCta" maxlength="160" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400" placeholder="¿Te gustó la atención? Dejanos tu reseña en RetoPA">
+                </div>
+                <!-- Categorías combobox -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                        Categorías
+                        <span class="text-xs text-gray-400 font-normal ml-1" id="catLimitLabel"></span>
+                    </label>
+                    <div class="relative" id="catComboWrapper">
+                        <i class="fas fa-tag absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none z-10"></i>
+                        <input type="text" id="editCatInput" placeholder="Escribí para buscar categoría..."
+                            autocomplete="off"
+                            class="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-400"
+                            oninput="filterCatCombo()" onfocus="openCatCombo()" onblur="setTimeout(closeCatCombo, 180)">
+                        <div id="editCatList" class="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-gray-100 hidden z-50 max-h-52 overflow-y-auto"></div>
+                    </div>
+                    <!-- Tags de categorías seleccionadas -->
+                    <div id="editCatTags" class="flex flex-wrap gap-1.5 mt-2"></div>
+                    <input type="hidden" id="editCatIds">
+                </div>
+                <!-- Horarios estructurado -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Horarios de atención</label>
+                    <div id="hoursWidget" class="space-y-2 bg-gray-50 rounded-xl p-3 border border-gray-200">
+                        <!-- días generados por JS -->
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <button type="button" onclick="applyHoursPreset('lv')"
+                            class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-100 transition">
+                            Lun–Vie
+                        </button>
+                        <button type="button" onclick="applyHoursPreset('lvs')"
+                            class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-100 transition">
+                            Lun–Sáb
+                        </button>
+                        <button type="button" onclick="applyHoursPreset('247')"
+                            class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-100 transition">
+                            24/7
+                        </button>
+                        <button type="button" onclick="applyHoursPreset('clear')"
+                            class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-100 transition">
+                            Limpiar
+                        </button>
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-1" id="hoursPreview"></p>
+                    <input type="hidden" id="editHours">
+                </div>
+
+                <!-- Etiquetas / Tags -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                        Etiquetas
+                        <span class="text-xs text-gray-400 font-normal ml-1" id="tagsLimitLabel"></span>
+                    </label>
+                    <div class="border border-gray-200 rounded-xl p-2 bg-white focus-within:ring-2 focus-within:ring-brand-400" id="tagsInputArea">
+                        <div id="tagsList" class="flex flex-wrap gap-1.5 mb-1.5"></div>
+                        <input type="text" id="tagsInput" placeholder="Escribí y presioná Enter o coma..."
+                            class="w-full text-sm border-0 outline-none bg-transparent px-1 py-0.5"
+                            onkeydown="handleTagInput(event)">
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-1">Ayudan a que te encuentren. Ej: delivery, estacionamiento, 24 horas</p>
+                    <input type="hidden" id="editTags">
+                </div>
+            </div>
+
+            <!-- TAB: Imágenes -->
+            <div id="editTab-media" class="edit-tab-panel hidden space-y-4">
+                <div id="uploadProgress" class="hidden bg-brand-50 border border-brand-200 rounded-xl px-4 py-3 text-sm text-brand-700 flex items-center gap-2">
+                    <i class="fas fa-spinner fa-spin"></i> Subiendo imagen...
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-image text-brand-400 mr-1"></i> Logo</label>
+                    <div id="editLogoBox" class="relative w-32 aspect-square rounded-xl border-2 border-dashed border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer hover:border-brand-400 transition mx-auto"
+                         onclick="document.getElementById('editLogoInput').click()">
+                        <img id="editLogoPreview" class="hidden absolute inset-0 w-full h-full object-cover">
+                        <div id="editLogoPlaceholder" class="text-center text-gray-400 p-3 z-10">
+                            <i class="fas fa-cloud-upload-alt text-2xl block mb-1"></i>
+                            <span class="text-xs">Logo</span>
+                        </div>
+                    </div>
+                    <input type="file" id="editLogoInput" accept="image/*" class="hidden" onchange="previewAndUpload(this,'logo')">
+                    <p class="text-[10px] text-gray-400 mt-2 text-center">JPG, PNG, WebP · máx 10MB</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-panorama text-brand-400 mr-1"></i> Portada</label>
+                    <div class="relative w-full rounded-xl border-2 border-dashed border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer hover:border-brand-400 transition"
+                         style="aspect-ratio:16/9"
+                         onclick="document.getElementById('editCoverInput').click()">
+                        <img id="editCoverPreview" class="hidden absolute inset-0 w-full h-full object-cover">
+                        <div id="editCoverPlaceholder" class="text-center text-gray-400 p-3 z-10">
+                            <i class="fas fa-cloud-upload-alt text-2xl block mb-1"></i>
+                            <span class="text-xs">Portada (1200×400px)</span>
+                        </div>
+                    </div>
+                    <input type="file" id="editCoverInput" accept="image/*" class="hidden" onchange="previewAndUpload(this,'cover')">
+                    <!-- Focal point picker — aparece después de subir la portada -->
+                    <div id="focalPointContainer"></div>
+                </div>
+            </div>
+            <div id="editTab-contact" class="edit-tab-panel hidden space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                    <input type="tel" id="editPhone" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                        <i class="fab fa-whatsapp text-green-500 mr-1"></i> WhatsApp
+                        <span class="text-xs text-gray-400 font-normal">— para el botón de la ficha</span>
+                    </label>
+                    <input type="tel" id="editWhatsapp" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400" placeholder="Ej: 595981620195">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" id="editEmail" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Sitio web</label>
+                    <input type="url" id="editWebsite" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400" placeholder="https://...">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Ciudad</label>
+                    <div class="relative" id="editCityWrapper">
+                        <i class="fas fa-map-marker-alt absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none z-10"></i>
+                        <input type="text" id="editCityInput" placeholder="Escribí tu ciudad..."
+                            autocomplete="off"
+                            class="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-400"
+                            oninput="filterEditCity()" onfocus="openEditCity()" onblur="setTimeout(closeEditCity, 180)">
+                        <input type="hidden" id="editCity">
+                        <div id="editCityList" class="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-gray-100 hidden z-50 max-h-52 overflow-y-auto"></div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
+                    <input type="text" id="editAddress" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand-400">
+                </div>
+            </div>
+
+            <!-- TAB: Redes Sociales -->
+            <div id="editTab-social" class="edit-tab-panel hidden space-y-3">
+                <p class="text-xs text-gray-500">Básico: solo WhatsApp · Negocio Digital: 2 redes · Pro: todas</p>
+                <div id="socialBasicMsg" class="hidden text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <i class="fas fa-lock mr-1"></i> Actualizá tu plan para agregar redes sociales.
+                </div>
+                <div id="socialFeaturedMsg" class="hidden text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                    <i class="fas fa-info-circle mr-1"></i> Tu plan incluye hasta <strong>2 redes sociales</strong>.
+                </div>
+                <div id="socialInputs" class="space-y-2">
+                    <div class="flex items-center gap-2">
+                        <span style="color:#E1306C;width:22px;text-align:center;flex-shrink:0"><i class="fab fa-instagram"></i></span>
+                        <input type="text" id="editSocialInstagram" class="flex-1 border border-gray-200 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-brand-400" placeholder="@usuario o URL">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span style="color:#1877F2;width:22px;text-align:center;flex-shrink:0"><i class="fab fa-facebook-f"></i></span>
+                        <input type="text" id="editSocialFacebook" class="flex-1 border border-gray-200 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-brand-400" placeholder="@pagina o URL">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span style="width:22px;text-align:center;flex-shrink:0"><i class="fab fa-tiktok"></i></span>
+                        <input type="text" id="editSocialTiktok" class="flex-1 border border-gray-200 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-brand-400" placeholder="@usuario o URL">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span style="color:#0A66C2;width:22px;text-align:center;flex-shrink:0"><i class="fab fa-linkedin-in"></i></span>
+                        <input type="text" id="editSocialLinkedin" class="flex-1 border border-gray-200 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-brand-400" placeholder="empresa o URL">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span style="width:22px;text-align:center;flex-shrink:0;font-weight:900;font-size:14px;">𝕏</span>
+                        <input type="text" id="editSocialTwitter" class="flex-1 border border-gray-200 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-brand-400" placeholder="@usuario o URL">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span style="color:#FF0000;width:22px;text-align:center;flex-shrink:0"><i class="fab fa-youtube"></i></span>
+                        <input type="text" id="editSocialYoutube" class="flex-1 border border-gray-200 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-brand-400" placeholder="@canal o URL">
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: Ubicación -->
+            <div id="editTab-location" class="edit-tab-panel hidden space-y-4">
+                <button type="button" id="editGeocodeBtn" onclick="clientGeocode()"
+                    class="touch-btn w-full text-sm font-bold py-3 rounded-xl border-2 border-brand-400 text-brand-600 hover:bg-brand-50 transition flex items-center justify-center gap-2">
+                    <i class="fas fa-search-location"></i> Buscar coordenadas desde dirección
+                </button>
+                <div id="clientMapContainer" class="rounded-xl overflow-hidden border border-gray-200" style="height:220px;background:#f1f5f9;display:flex;align-items:center;justify-content:center">
+                    <p class="text-sm text-gray-400 text-center" id="clientMapPlaceholder">
+                        <i class="fas fa-map text-2xl block mb-1 text-gray-300"></i>El mapa aparece al buscar coordenadas
+                    </p>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Latitud</label>
+                        <input type="number" step="any" id="editLat" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm" placeholder="-25.2867">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Longitud</label>
+                        <input type="number" step="any" id="editLng" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm" placeholder="-57.6478">
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400">También podés tocar el mapa para mover el marcador.</p>
+            </div>
+
+            <div id="editError" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2"></div>
+
+            <!-- Save button — sticky en mobile -->
+            <div class="flex gap-3 pt-2 sticky bottom-0 bg-white pb-4 md:pb-2 md:static">
+                <button onclick="saveBizEdit()" class="touch-btn flex-1 bg-brand-500 hover:bg-brand-600 text-white font-bold py-3.5 rounded-xl transition flex items-center justify-center gap-2 text-sm">
+                    <i class="fas fa-save"></i> Guardar cambios
+                </button>
+                <button onclick="closeEditModal()" class="touch-btn border border-gray-200 text-gray-600 px-5 py-3.5 rounded-xl hover:bg-gray-50 text-sm">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── TOAST ────────────────────────────────────────────────────────── -->
+<div id="clientToast" class="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[100] hidden pointer-events-none">
+    <div class="bg-gray-900 text-white text-sm px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2" id="clientToastMsg"></div>
+</div>
+
+<script>
+// ── Navbar empresa dropdown (mobile) ───────────────────────────────
+function toggleNavBizDropdown() {
+    const dd = document.getElementById('navBizDropdown');
+    const ch = document.getElementById('navBizChevron');
+    const isOpen = !dd.classList.contains('hidden');
+    if (isOpen) { dd.classList.add('hidden'); ch.style.transform = ''; return; }
+
+    const list = document.getElementById('navBizList');
+    list.innerHTML = (myBusinesses || []).map(b => `
+        <button onclick="switchActiveBiz('${b.slug}')"
+            class="w-full text-left flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition ${activeDashBiz === b.slug ? 'bg-brand-50' : ''}">
+            ${b.image_url
+                ? `<img src="${b.image_url}" class="w-8 h-8 rounded-lg object-cover flex-shrink-0">`
+                : `<div class="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-xs font-black text-white" style="background:#0ea5e9">${(b.name||'E').charAt(0)}</div>`
+            }
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-bold text-gray-900 truncate">${escHtml(b.trade_name || b.name)}</p>
+                <p class="text-xs text-gray-400">${getPlanLabel(b.plan_type)}</p>
+            </div>
+            ${activeDashBiz === b.slug ? '<i class="fas fa-check text-brand-500 text-xs flex-shrink-0"></i>' : ''}
+        </button>`).join('');
+
+    dd.classList.remove('hidden');
+    ch.style.transform = 'rotate(180deg)';
+}
+
+function switchActiveBiz(slug) {
+    document.getElementById('navBizDropdown').classList.add('hidden');
+    document.getElementById('navBizChevron').style.transform = '';
+
+    // Actualizar variable global maestra
+    activeDashBiz = slug;
+    const biz = (myBusinesses || []).find(b => b.slug === slug);
+
+    // Actualizar label y logo en la barra superior
+    updateNavBizDisplay(biz);
+
+    // Recargar la sección activa con la nueva empresa
+    const section = typeof _currentSection !== 'undefined' ? _currentSection : 'dashboard';
+    if (typeof showSection === 'function') {
+        showSection(section);
+    }
+}
+
+function updateNavBizDisplay(biz) {
+    const label = document.getElementById('navBizLabel');
+    const logo  = document.getElementById('navBizLogo');
+    if (!biz) return;
+    if (label) label.textContent = biz.trade_name || biz.name || '';
+    if (logo) {
+        if (biz.image_url) {
+            logo.src = biz.image_url;
+            logo.classList.remove('hidden');
+        } else {
+            logo.classList.add('hidden');
+        }
+    }
+}
+
+// Close dropdown on outside tap
+document.addEventListener('click', e => {
+    const btn = document.getElementById('navBizBtn');
+    const dd  = document.getElementById('navBizDropdown');
+    if (dd && !dd.classList.contains('hidden') && btn && !btn.contains(e.target) && !dd.contains(e.target)) {
+        dd.classList.add('hidden');
+        document.getElementById('navBizChevron').style.transform = '';
+    }
+});
+
+// ── Horarios widget ─────────────────────────────────────────────────
+const DAYS = [
+    { key: 'Lun', label: 'Lunes' },
+    { key: 'Mar', label: 'Martes' },
+    { key: 'Mié', label: 'Miércoles' },
+    { key: 'Jue', label: 'Jueves' },
+    { key: 'Vie', label: 'Viernes' },
+    { key: 'Sáb', label: 'Sábado' },
+    { key: 'Dom', label: 'Domingo' },
+];
+let _hoursState = {}; // { 'Lun': { open: true, from: '09:00', to: '18:00', h24: false } }
+
+function initHoursWidget(hoursInput) {
+    // Reset state
+    DAYS.forEach(d => { _hoursState[d.key] = { open: false, from: '09:00', to: '18:00', h24: false }; });
+
+    // v2.6 S3.1: acepta objeto JSON (hoursJson) o string TEXT legacy
+    if (hoursInput && typeof hoursInput === 'object') {
+        DAYS.forEach(d => {
+            const s = hoursInput[d.key];
+            if (!s || s.closed) return;
+            _hoursState[d.key].open = true;
+            _hoursState[d.key].h24  = s.h24 || false;
+            _hoursState[d.key].from = s.open  || '09:00';
+            _hoursState[d.key].to   = s.close || '18:00';
+        });
+        renderHoursWidget();
+        return;
+    }
+
+    // Parse string legacy — e.g. "Lun-Vie 9:00-18:00, Sáb 9:00-13:00"
+    const hoursStr = typeof hoursInput === 'string' ? hoursInput : '';
+    if (hoursStr) {
+        const parts = hoursStr.split(',').map(s => s.trim());
+        parts.forEach(part => {
+            const m = part.match(/^([A-Za-záéíóúÁÉÍÓÚñÑ\-]+)\s*(.+)?$/);
+            if (!m) return;
+            const daysPart = m[1].trim();
+            const timePart = (m[2] || '').trim();
+
+            // Expand range Lun-Vie → ['Lun','Mar','Mié','Jue','Vie']
+            const dayRange = expandDayRange(daysPart);
+            dayRange.forEach(dk => {
+                if (!_hoursState[dk]) return;
+                _hoursState[dk].open = true;
+                if (timePart.toLowerCase() === '24h' || timePart === '24 horas') {
+                    _hoursState[dk].h24 = true;
+                } else {
+                    const tm = timePart.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
+                    if (tm) { _hoursState[dk].from = tm[1]; _hoursState[dk].to = tm[2]; }
+                }
+            });
+        });
+    }
+    renderHoursWidget();
+}
+
+function expandDayRange(str) {
+    const keys = DAYS.map(d => d.key);
+    if (str.includes('-')) {
+        const [a, b] = str.split('-');
+        const ai = keys.indexOf(a.trim()), bi = keys.indexOf(b.trim());
+        if (ai >= 0 && bi >= 0 && bi >= ai) return keys.slice(ai, bi + 1);
+    }
+    return keys.filter(k => str.includes(k));
+}
+
+function renderHoursWidget() {
+    const container = document.getElementById('hoursWidget');
+    if (!container) return;
+    container.innerHTML = DAYS.map(d => {
+        const s = _hoursState[d.key];
+        return `
+        <div class="flex items-center gap-2 py-1">
+            <label class="flex items-center gap-2 cursor-pointer w-28 flex-shrink-0">
+                <div class="relative">
+                    <input type="checkbox" class="sr-only peer" ${s.open ? 'checked' : ''}
+                        onchange="toggleDay('${d.key}', this.checked)">
+                    <div class="w-9 h-5 bg-gray-200 rounded-full peer-checked:bg-brand-500 transition"></div>
+                    <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-4"></div>
+                </div>
+                <span class="text-sm font-medium ${s.open ? 'text-gray-900' : 'text-gray-400'}">${d.key}</span>
+            </label>
+            ${s.open ? `
+                <label class="flex items-center gap-1">
+                    <input type="checkbox" class="w-3 h-3 rounded accent-brand-500" ${s.h24 ? 'checked' : ''}
+                        onchange="toggleH24('${d.key}', this.checked)">
+                    <span class="text-xs text-gray-500">24h</span>
+                </label>
+                ${!s.h24 ? `
+                <input type="time" value="${s.from}" class="text-xs border border-gray-200 rounded-lg px-2 py-1 w-20 focus:ring-1 focus:ring-brand-400"
+                    onchange="updateHoursTime('${d.key}','from',this.value)">
+                <span class="text-gray-400 text-xs">–</span>
+                <input type="time" value="${s.to}" class="text-xs border border-gray-200 rounded-lg px-2 py-1 w-20 focus:ring-1 focus:ring-brand-400"
+                    onchange="updateHoursTime('${d.key}','to',this.value)">` : ''}
+            ` : '<span class="text-xs text-gray-400 ml-2">Cerrado</span>'}
+        </div>`;
+    }).join('');
+    updateHoursPreview();
+}
+
+function toggleDay(key, val) {
+    _hoursState[key].open = val;
+    renderHoursWidget();
+}
+function toggleH24(key, val) {
+    _hoursState[key].h24 = val;
+    renderHoursWidget();
+}
+function updateHoursTime(key, field, val) {
+    _hoursState[key][field] = val;
+    updateHoursPreview();
+}
+
+function applyHoursPreset(preset) {
+    DAYS.forEach(d => { _hoursState[d.key] = { open: false, from: '09:00', to: '18:00', h24: false }; });
+    if (preset === 'lv') {
+        ['Lun','Mar','Mié','Jue','Vie'].forEach(k => { _hoursState[k].open = true; });
+    } else if (preset === 'lvs') {
+        ['Lun','Mar','Mié','Jue','Vie','Sáb'].forEach(k => { _hoursState[k].open = true; });
+    } else if (preset === '247') {
+        DAYS.forEach(d => { _hoursState[d.key] = { open: true, from: '00:00', to: '00:00', h24: true }; });
+    }
+    renderHoursWidget();
+}
+
+function updateHoursPreview() {
+    // Build string and update hidden input
+    const segments = buildHoursString();
+    const el = document.getElementById('editHours');
+    if (el) el.value = segments;
+    const prev = document.getElementById('hoursPreview');
+    if (prev) prev.textContent = segments ? `Vista previa: ${segments}` : '';
+}
+
+function buildHoursString() {
+    const openDays = DAYS.filter(d => _hoursState[d.key].open);
+    if (!openDays.length) return '';
+
+    // Group consecutive days with same schedule
+    const groups = [];
+    let current = null;
+    openDays.forEach(d => {
+        const s = _hoursState[d.key];
+        const schedule = s.h24 ? '24h' : `${s.from}-${s.to}`;
+        if (current && current.schedule === schedule && DAYS.findIndex(x=>x.key===d.key) === DAYS.findIndex(x=>x.key===current.last)+1) {
+            current.last = d.key;
+            current.keys.push(d.key);
+        } else {
+            current = { first: d.key, last: d.key, schedule, keys: [d.key] };
+            groups.push(current);
+        }
+    });
+
+    return groups.map(g => {
+        const range = g.keys.length > 2 ? `${g.first}-${g.last}` : g.keys.join(', ');
+        return `${range} ${g.schedule}`;
+    }).join(' | ');
+}
+
+// buildHoursJson() — v2.6 S3.1 — serializa _hoursState a JSONB
+function buildHoursJson() {
+    const result = {};
+    DAYS.forEach(d => {
+        const s = _hoursState[d.key];
+        if (!s || !s.open) { result[d.key] = { closed: true }; return; }
+        result[d.key] = s.h24
+            ? { open: '00:00', close: '23:59', h24: true,  closed: false }
+            : { open: s.from,  close: s.to,    h24: false, closed: false };
+    });
+    return result;
+}
+
+// ── Tags / Etiquetas widget ──────────────────────────────────────────
+let _tags = [];
+let _tagsMax = Infinity;
+
+function initTagsWidget(biz) {
+    const planLimits = { basic: 2, featured: 5, premium: Infinity };
+    _tagsMax = planLimits[biz.plan_type] ?? 2;
+    _tags = Array.isArray(biz.tags) ? [...biz.tags] : (biz.tags ? String(biz.tags).split(',').map(t=>t.trim()).filter(Boolean) : []);
+    const limitEl = document.getElementById('tagsLimitLabel');
+    if (limitEl) limitEl.textContent = _tagsMax === Infinity ? '(ilimitado con tu plan Pro)' : `(máx. ${_tagsMax} con tu plan ${biz.plan_type === 'featured' ? 'Destacado' : 'Básico'})`;
+    renderTagsList();
+}
+
+function renderTagsList() {
+    const container = document.getElementById('tagsList');
+    if (!container) return;
+    container.innerHTML = _tags.map((tag, i) =>
+        `<span class="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full">
+            ${escHtml(tag)}
+            <button onclick="removeTag(${i})" class="hover:text-red-500 font-bold ml-0.5" style="font-size:14px;line-height:1">×</button>
+        </span>`
+    ).join('');
+    const input = document.getElementById('tagsInput');
+    if (input) {
+        const atMax = _tagsMax !== Infinity && _tags.length >= _tagsMax;
+        input.disabled  = atMax;
+        input.placeholder = atMax ? `Límite de ${_tagsMax} alcanzado` : 'Escribí y presioná Enter o coma...';
+    }
+    document.getElementById('editTags').value = JSON.stringify(_tags);
+}
+
+function handleTagInput(e) {
+    if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        const val = e.target.value.trim().replace(/,/g, '');
+        addTag(val);
+        e.target.value = '';
+    } else if (e.key === 'Backspace' && e.target.value === '' && _tags.length) {
+        removeTag(_tags.length - 1);
+    }
+}
+
+function addTag(val) {
+    if (!val || val.length < 2) return;
+    if (_tagsMax !== Infinity && _tags.length >= _tagsMax) { showToastClient(`Límite de ${_tagsMax} etiquetas`, 'error'); return; }
+    if (_tags.includes(val)) return;
+    _tags.push(val);
+    renderTagsList();
+}
+
+function removeTag(i) {
+    _tags.splice(i, 1);
+    renderTagsList();
+}
+
+// ── Modal tab switcher ──────────────────────────────────────────────
+function switchEditTab(tab, el) {
+    document.querySelectorAll('.edit-tab-panel').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('#editBizModal .mobile-tab').forEach(t => t.classList.remove('active'));
+    const panel = document.getElementById('editTab-' + tab);
+    if (panel) panel.classList.remove('hidden');
+    if (el) el.classList.add('active');
+
+    // Init map when location tab becomes visible — read coords from inputs
+    if (tab === 'location') {
+        setTimeout(() => {
+            const lat = parseFloat(document.getElementById('editLat')?.value);
+            const lng = parseFloat(document.getElementById('editLng')?.value);
+            if (!isNaN(lat) && !isNaN(lng)) {
+                initClientMap(lat, lng);
+            } else if (typeof initClientMap === 'function') {
+                initClientMap(NaN, NaN); // shows "sin coordenadas"
+            }
+        }, 80);
+    }
+}
+
+// ── Review mobile tab filter ────────────────────────────────────────
+function setReviewTab(rating, el) {
+    document.querySelectorAll('.mobile-tab').forEach(t => t.classList.remove('active'));
+    if (el) el.classList.add('active');
+    // Sync desktop hidden select and trigger filter
+    const sel = document.getElementById('reviewsRatingFilter');
+    if (sel) { sel.value = rating === 'all' ? '' : rating; filterReviews(); }
+}
+
+// ── Bottom nav active state sync ────────────────────────────────────
+const _origShowSection = window.showSection;
+function showSection(name) {
+    // Update bottom nav
+    document.querySelectorAll('.bnav-item').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById('bnav-' + name);
+    if (btn) btn.classList.add('active');
+    // Call original
+    if (typeof _origShowSection === 'function') _origShowSection(name);
+    if (name === 'hepta') loadHeptaSection();
+}
+
+// ── Modal bottom-sheet open/close ───────────────────────────────────
+const _origCloseEditModal = window.closeEditModal;
+function closeEditModal() {
+    const modal = document.getElementById('editBizModal');
+    modal.classList.remove('open');
+    setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
+    document.body.style.overflow = '';
+}
+function openEditModalSheet() {
+    const modal = document.getElementById('editBizModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => modal.classList.add('open'));
+}
+</script>
+
+<script src="/cliente/js/config.js"></script>
+<script src="/cliente/js/tour.js"></script>
+<script src="/cliente/js/hepta.js"></script>
+<script src="/cliente/js/dashboard.js"></script>
+<script src="/cliente/js/businesses.js"></script>
+<script src="/cliente/js/settings.js"></script>
+<script src="/cliente/js/promotions.js"></script>
+<script src="/cliente/js/app.js"></script>
+</body>
+</html>

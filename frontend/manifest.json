@@ -1,0 +1,36 @@
+{
+  "name": "RetoPA — Directorio Comercial de Paraguay",
+  "short_name": "RetoPA",
+  "description": "El ecosistema comercial más completo de Paraguay. Encontrá empresas, negocios y profesionales.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#1B3A6B",
+  "lang": "es",
+  "categories": ["business", "shopping"],
+  "icons": [
+    { "src": "/img/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "screenshots": [
+    { "src": "/img/screenshot-mobile.png", "sizes": "390x844", "type": "image/png", "form_factor": "narrow" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Buscar empresas",
+      "short_name": "Buscar",
+      "description": "Ir al buscador",
+      "url": "/#directorio",
+      "icons": [{ "src": "/img/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Mi panel",
+      "short_name": "Mi panel",
+      "description": "Panel de empresa",
+      "url": "/cliente",
+      "icons": [{ "src": "/img/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

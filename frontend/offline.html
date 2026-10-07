@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sin conexión — RetoPA</title>
+    <link rel="icon" href="/img/icon-192.png">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(160deg, #1B3A6B 0%, #0ea5e9 100%);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            text-align: center;
+        }
+        .card {
+            max-width: 380px;
+            width: 100%;
+        }
+        .icon {
+            width: 96px;
+            height: 96px;
+            margin: 0 auto 28px;
+            background: rgba(255,255,255,.12);
+            border-radius: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            backdrop-filter: blur(8px);
+        }
+        h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 12px; }
+        p { font-size: 1rem; line-height: 1.6; opacity: .85; margin-bottom: 28px; }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #fff;
+            color: #1B3A6B;
+            border: none;
+            padding: 13px 28px;
+            border-radius: 14px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+            transition: transform .15s, box-shadow .15s;
+            box-shadow: 0 4px 14px rgba(0,0,0,.2);
+        }
+        .btn:active { transform: scale(.97); }
+        .brand {
+            margin-top: 40px;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            opacity: .7;
+        }
+        .status {
+            margin-top: 18px;
+            font-size: 13px;
+            opacity: .75;
+            min-height: 18px;
+        }
+        .dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #fbbf24;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .dot.online { background: #4ade80; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">📡</div>
+        <h1>Sin conexión</h1>
+        <p>Parece que te quedaste sin internet. Revisá tu conexión y volvé a intentar — RetoPA te espera.</p>
+        <a href="/" class="btn" id="retryBtn">
+            <span>↻</span> Reintentar
+        </a>
+        <div class="status" id="status"><span class="dot" id="dot"></span>Esperando conexión...</div>
+        <div class="brand">RETOPA · Mapa vivo de Paraguay</div>
+    </div>
+    <script>
+        const statusEl = document.getElementById('status');
+        const dotEl = document.getElementById('dot');
+
+        function updateStatus() {
+            if (navigator.onLine) {
+                dotEl.classList.add('online');
+                statusEl.innerHTML = '<span class="dot online"></span>¡Conexión restaurada! Recargando...';
+                setTimeout(() => window.location.href = '/', 800);
+            } else {
+                dotEl.classList.remove('online');
+                statusEl.innerHTML = '<span class="dot"></span>Esperando conexión...';
+            }
+        }
+
+        window.addEventListener('online', updateStatus);
+        document.getElementById('retryBtn').addEventListener('click', (e) => {
+            if (!navigator.onLine) {
+                e.preventDefault();
+                statusEl.innerHTML = '<span class="dot"></span>Todavía sin conexión...';
+            }
+        });
+        updateStatus();
+    </script>
+</body>
+</html>

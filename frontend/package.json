@@ -3,9 +3,13 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build:css": "npx tailwindcss -i ./css/tailwind-main.css -o ./public/css/main.css --minify && npx tailwindcss -i ./css/tailwind-admin.css -o ./public/css/admin.css --minify && npx tailwindcss -i ./css/tailwind-cliente.css -o ./public/css/cliente.css --minify"
   },
   "dependencies": {
     "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
   }
 }

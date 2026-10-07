@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <!-- Esta página pertenece a retopa.com.py — ecosistema comercial de Paraguay -->
+  <title>Reclamá tu perfil en RetoPA — retopa.com.py</title>
+  <link rel="stylesheet" href="/public/css/main.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .hero-bg { background: linear-gradient(135deg, #1B3A6B 0%, #0f2548 100%); }
+    .card { box-shadow: 0 8px 40px rgba(27,58,107,0.13); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .animate-spin { animation: spin 1s linear infinite; }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-50" style="font-family:'Segoe UI',Arial,sans-serif">
+
+  <header class="hero-bg py-6 px-4 text-center">
+    <a href="/" style="text-decoration:none">
+      <span style="font-size:24px;font-weight:900;color:white">Reto<span style="color:#E8B84B">PA</span></span>
+    </a>
+    <p style="color:rgba(255,255,255,0.7);font-size:12px;margin:4px 0 0">El ecosistema comercial de Paraguay</p>
+  </header>
+
+  <div id="stateLoading" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:16px">
+    <div style="width:48px;height:48px;border:4px solid #dbeafe;border-top-color:#1B3A6B;border-radius:50%" class="animate-spin"></div>
+    <p style="color:#64748b;font-size:14px">Verificando tu link...</p>
+  </div>
+
+  <div id="stateError" style="display:none;max-width:420px;margin:0 auto;padding:48px 16px;text-align:center">
+    <div style="font-size:48px;margin-bottom:16px">😕</div>
+    <h2 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 8px">Link inválido o expirado</h2>
+    <p id="errorMsg" style="color:#64748b;font-size:14px;margin:0 0 24px">Este link ya no es válido.</p>
+    <a href="/" style="display:inline-flex;align-items:center;gap:8px;background:#1B3A6B;color:white;text-decoration:none;padding:12px 24px;border-radius:12px;font-weight:700;font-size:14px">
+      <i class="fas fa-home"></i> Ir al inicio
+    </a>
+  </div>
+
+  <div id="stateSuccess" style="display:none;max-width:420px;margin:0 auto;padding:48px 16px;text-align:center">
+    <div style="font-size:48px;margin-bottom:16px">🎉</div>
+    <h2 style="font-size:22px;font-weight:800;color:#0f172a;margin:0 0 8px">¡Solicitud enviada!</h2>
+    <p style="color:#64748b;font-size:14px;margin:0 0 4px">Revisaremos tu solicitud en <strong>24-48 horas</strong>.</p>
+    <p style="color:#94a3b8;font-size:12px;margin:0 0 24px">Te avisaremos al email registrado cuando tu perfil esté verificado.</p>
+    <a href="/" style="display:inline-flex;align-items:center;gap:8px;background:#1B3A6B;color:white;text-decoration:none;padding:12px 24px;border-radius:12px;font-weight:700;font-size:14px">
+      <i class="fas fa-search"></i> Explorar RetoPA
+    </a>
+  </div>
+
+  <div id="stateClaim" style="display:none;max-width:420px;margin:0 auto;padding:24px 16px">
+    <div id="bizCard" class="card" style="background:white;border-radius:20px;padding:24px;margin-bottom:16px"></div>
+
+    <div style="background:#eff6ff;border-radius:16px;padding:20px;margin-bottom:16px">
+      <p style="font-size:13px;font-weight:700;color:#1B3A6B;margin:0 0 12px">¿Qué obtenés al reclamar?</p>
+      <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px">
+        <li style="font-size:13px;color:#475569;display:flex;align-items:center;gap:8px"><i class="fas fa-check-circle" style="color:#22c55e;font-size:11px"></i> Badge ✓ Verificado en tu perfil</li>
+        <li style="font-size:13px;color:#475569;display:flex;align-items:center;gap:8px"><i class="fas fa-check-circle" style="color:#22c55e;font-size:11px"></i> Aparecer primero en los resultados</li>
+        <li style="font-size:13px;color:#475569;display:flex;align-items:center;gap:8px"><i class="fas fa-check-circle" style="color:#22c55e;font-size:11px"></i> Editar descripción, fotos y horarios</li>
+        <li style="font-size:13px;color:#475569;display:flex;align-items:center;gap:8px"><i class="fas fa-check-circle" style="color:#22c55e;font-size:11px"></i> Ver estadísticas de visitas y contactos</li>
+        <li style="font-size:13px;color:#475569;display:flex;align-items:center;gap:8px"><i class="fas fa-check-circle" style="color:#22c55e;font-size:11px"></i> Todo gratis en el plan básico</li>
+      </ul>
+    </div>
+
+    <div class="card" style="background:white;border-radius:20px;padding:24px">
+      <h3 style="font-size:16px;font-weight:800;color:#0f172a;margin:0 0 4px">Completá tus datos</h3>
+      <p style="font-size:12px;color:#94a3b8;margin:0 0 4px">Creamos tu cuenta para gestionar el perfil</p>
+      <p style="font-size:11px;color:#cbd5e1;margin:0 0 20px">
+        <i class="fas fa-lock" style="color:#22c55e;margin-right:4px"></i>
+        Formulario seguro de <strong style="color:#1B3A6B">retopa.com.py</strong>
+      </p>
+
+      <div id="formError" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font-size:13px;border-radius:12px;padding:12px 16px;margin-bottom:16px"></div>
+
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:6px">Tu nombre completo</label>
+          <input id="inputName" type="text" placeholder="Ej: Juan Pérez"
+            autocomplete="name"
+            style="width:100%;box-sizing:border-box;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 16px;font-size:14px;outline:none">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:6px">Tu email <span style="color:#ef4444">*</span></label>
+          <input id="inputEmail" type="email" placeholder="tucorreo@ejemplo.com"
+            autocomplete="email"
+            style="width:100%;box-sizing:border-box;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 16px;font-size:14px;outline:none">
+          <p style="font-size:11px;color:#94a3b8;margin:4px 0 0">Usarás este email para ingresar al panel</p>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:6px">Teléfono (opcional)</label>
+          <input id="inputPhone" type="tel" placeholder="0981 123 456"
+            autocomplete="tel"
+            style="width:100%;box-sizing:border-box;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 16px;font-size:14px;outline:none">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:6px">Elegí una contraseña</label>
+          <div style="position:relative">
+            <input id="inputPassword" type="password" placeholder="Mínimo 8 caracteres"
+              autocomplete="new-password"
+              style="width:100%;box-sizing:border-box;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 48px 12px 16px;font-size:14px;outline:none">
+            <button type="button" onclick="togglePass()"
+              style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8">
+              <i id="passIcon" class="fas fa-eye"></i>
+            </button>
+          </div>
+          <p style="font-size:11px;color:#94a3b8;margin:4px 0 0">Usarás esta contraseña para ingresar al panel</p>
+        </div>
+      </div>
+
+      <button id="btnSubmit" onclick="submitClaim()"
+        style="width:100%;margin-top:24px;background:#1B3A6B;color:white;border:none;padding:14px;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+        <i class="fas fa-shield-check"></i> Reclamar mi perfil gratis
+      </button>
+
+      <p style="font-size:11px;color:#94a3b8;text-align:center;margin:16px 0 0">
+        Al continuar aceptás los términos de uso de RetoPA.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    const API = '/api/v2/claim';
+    let bizData = null;
+    let claimToken = null;
+
+    function getToken() {
+      return new URLSearchParams(window.location.search).get('token');
+    }
+    function show(state) {
+      ['stateLoading','stateError','stateClaim','stateSuccess'].forEach(id => {
+        document.getElementById(id).style.display = 'none';
+      });
+      document.getElementById(state).style.display = state === 'stateClaim' ? 'block' : 'block';
+    }
+    function togglePass() {
+      const inp = document.getElementById('inputPassword');
+      const ico = document.getElementById('passIcon');
+      if (inp.type === 'password') { inp.type='text'; ico.className='fas fa-eye-slash'; }
+      else { inp.type='password'; ico.className='fas fa-eye'; }
+    }
+
+    async function loadBiz() {
+      claimToken = getToken();
+      if (!claimToken) {
+        document.getElementById('errorMsg').textContent = 'No se encontró el token en el link.';
+        show('stateError'); return;
+      }
+      try {
+        const res  = await fetch(`${API}/info?token=${encodeURIComponent(claimToken)}`);
+        const data = await res.json();
+        if (!data.success) {
+          document.getElementById('errorMsg').textContent = data.error || 'Link inválido.';
+          show('stateError'); return;
+        }
+        bizData = data.data;
+        renderBizCard(bizData);
+        show('stateClaim');
+      } catch(e) {
+        document.getElementById('errorMsg').textContent = 'Error al cargar el perfil. Intentá de nuevo.';
+        show('stateError');
+      }
+    }
+
+    function renderBizCard(biz) {
+      document.getElementById('bizCard').innerHTML = `
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+          <div style="width:56px;height:56px;border-radius:14px;background:#eff6ff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:#1B3A6B;flex-shrink:0;border:1px solid #dbeafe">
+            ${biz.logoEmoji || biz.name.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <p style="font-weight:800;font-size:18px;color:#0f172a;margin:0 0 4px">${biz.name}</p>
+            ${biz.categoryName ? `<span style="font-size:11px;background:#eff6ff;color:#1B3A6B;font-weight:700;padding:2px 10px;border-radius:6px">${biz.categoryName}</span>` : ''}
+          </div>
+        </div>
+        <div style="border-top:1px solid #f1f5f9;padding-top:16px;display:flex;flex-direction:column;gap:6px">
+          ${biz.city ? `<p style="margin:0;font-size:13px;color:#64748b;display:flex;align-items:center;gap:8px"><i class="fas fa-map-marker-alt" style="color:#cbd5e1;width:14px;text-align:center"></i>${biz.city}${biz.department ? ', ' + biz.department : ''}</p>` : ''}
+          ${biz.phone ? `<p style="margin:0;font-size:13px;color:#64748b;display:flex;align-items:center;gap:8px"><i class="fas fa-phone" style="color:#cbd5e1;width:14px;text-align:center"></i>${biz.phone}</p>` : ''}
+          ${biz.email ? `<p style="margin:0;font-size:13px;color:#64748b;display:flex;align-items:center;gap:8px"><i class="fas fa-envelope" style="color:#cbd5e1;width:14px;text-align:center"></i>${biz.email}</p>` : ''}
+        </div>
+        <a href="/negocio/${biz.slug}" target="_blank"
+          style="display:inline-flex;align-items:center;gap:6px;margin-top:14px;font-size:12px;color:#1B3A6B;font-weight:700;text-decoration:none">
+          <i class="fas fa-external-link-alt" style="font-size:10px"></i> Ver perfil público
+        </a>
+      `;
+    }
+
+    async function submitClaim() {
+      const name     = document.getElementById('inputName').value.trim();
+      const email    = document.getElementById('inputEmail').value.trim();
+      const phone    = document.getElementById('inputPhone').value.trim();
+      const password = document.getElementById('inputPassword').value;
+      const btn      = document.getElementById('btnSubmit');
+
+      document.getElementById('formError').style.display = 'none';
+
+      if (!name)             { showError('Ingresá tu nombre completo'); return; }
+      if (!email || !email.includes('@')) { showError('Ingresá un email válido'); return; }
+      if (password.length < 8) { showError('La contraseña debe tener al menos 8 caracteres'); return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner animate-spin"></i> Enviando...';
+
+      try {
+        const res  = await fetch(`${API}/submit`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ token: claimToken, name, email, phone, password }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          showError(data.error || 'Ocurrió un error. Intentá de nuevo.');
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-shield-check"></i> Reclamar mi perfil gratis';
+          return;
+        }
+        show('stateSuccess');
+      } catch(e) {
+        showError('Error de conexión. Revisá tu internet e intentá de nuevo.');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-shield-check"></i> Reclamar mi perfil gratis';
+      }
+    }
+
+    function showError(msg) {
+      const div = document.getElementById('formError');
+      div.textContent = msg;
+      div.style.display = 'block';
+      div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    loadBiz();
+  </script>
+</body>
+</html>
