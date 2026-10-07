@@ -163,7 +163,7 @@ async function loadBusinesses(reset = true, targetId = 'resultsList') {
             if (typeof refreshLocationIfStale === 'function') refreshLocationIfStale();
         } else if (navigator.geolocation && typeof requestLocation === 'function') {
             // Sin ubicación y el usuario está buscando — pedirla y recargar
-            requestLocation(() => loadBusinesses(true, 'resultsList'), false);
+            requestLocation(() => { if (typeof _reloadForLocation === 'function') _reloadForLocation(); else loadBusinesses(true, 'resultsList'); }, false);
         }
     }
 
@@ -178,8 +178,21 @@ async function loadBusinesses(reset = true, targetId = 'resultsList') {
     if (_p === 'semantica') sessionStorage.setItem('rp_modo', 'semantica');
     if (_p === 'clasico')   sessionStorage.removeItem('rp_modo');
     const _modoSem = sessionStorage.getItem('rp_modo') === 'semantica';
-    const _endpoint = (_modoSem && params.get('q')) ? '/businesses/semantica' : '/businesses';
-    const data = await apiGet(`${_endpoint}?${params.toString()}`);
+    const _usaSem  = _modoSem && params.get('q');
+
+    // La semantica NUNCA debe devolver menos que el clasico: si no encuentra
+    // nada, o si el endpoint falla, caemos al buscador de siempre.
+    let data = null;
+    if (_usaSem) {
+        try {
+            data = await apiGet(`/businesses/semantica?${params.toString()}`);
+        } catch (e) {
+            console.warn('[busqueda] semantica fallo, uso el clasico:', e.message);
+            data = null;
+        }
+        if (!data || !data.success || !(data.total > 0)) data = null;
+    }
+    if (!data) data = await apiGet(`/businesses?${params.toString()}`);
 
     if (!data.success) {
         list.innerHTML = '<div class="text-center text-gray-500 py-8">Error al cargar empresas</div>';
