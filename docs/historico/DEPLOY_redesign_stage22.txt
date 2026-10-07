@@ -1,0 +1,80 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Rediseño mobile (opción A) · ETAPA 2.2 (delta sobre la Etapa 2.1)
+Registro SIN login forzado (pide correo) + SIN selector de plan
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ CAMBIA
+──────────────────────────────────────────────────
+1) SE QUITA EL LOGIN FORZADO al tocar "Registrar mi negocio".
+   · Antes: abría el modal de login y guardaba una intención pendiente.
+   · Ahora: abre DIRECTO el formulario corto. La puerta de entrada no exige
+     crear cuenta ni iniciar sesión.
+   · En vez del login, el form pide un CORREO ("Tu correo *"), con el que el
+     dueño va a gestionar su/s ficha/s más adelante. No se muestra a los clientes.
+
+2) SE QUITA EL SELECTOR DE PLAN del registro.
+   · Antes: paso 1 = elegir Ficha Básica / Negocio Destacado / Business Pro.
+   · Ahora: no hay paso de plan. La ficha nace en 'basic' y el usuario mejora
+     el plan luego desde el panel. (No es el lugar ni el momento para vender.)
+   · El botón "Atrás" del form pasó a ser "Cancelar".
+
+CÓMO QUEDA EL ENVÍO (sin cambios de backend)
+──────────────────────────────────────────────────
+  POST /leads exige name/phone/email/contact_name/contact_email, y user_id es
+  OPCIONAL (ownerFreeLimitReached(null)=false). Enviamos:
+    · name / trade_name = Nombre del negocio
+    · phone / contact_phone = WhatsApp (prefijo + número)
+    · email / contact_email = el correo del form (normalizado a minúsculas)
+    · contact_name = nombre del usuario si hay sesión, si no el nombre del negocio
+    · category_id / city / image_url (opcionales)
+    · user_id = SOLO si hay sesión activa (engancha la ficha al usuario).
+  Sin sesión, la ficha nace SIN dueño (verified=FALSE) y queda lista para
+  engancharse luego por ese correo.
+
+  · Con sesión: el correo se prellena con el de la cuenta y se manda user_id.
+  · La pantalla de éxito confirma el correo guardado ("Te vamos a escribir ahí").
+
+IMPORTANTE — ENGANCHE POSTERIOR (recomendado, NO incluido acá)
+──────────────────────────────────────────────────
+  Hoy POST /auth/register crea el usuario pero NO vincula fichas por correo.
+  Para que "el mismo correo sirva para gestionar" de forma automática, el
+  próximo paso sugerido es: al registrarse/loguearse un usuario, enganchar como
+  dueño las businesses con email = user.email que aún no tengan dueño en
+  user_businesses. Es un cambio chico en auth-public.js (lo dejamos listo para
+  la próxima si querés). Mientras tanto el enganche puede hacerse desde admin.
+
+ARCHIVOS MODIFICADOS (delta de la etapa 2.1)
+──────────────────────────────────────────────────
+  frontend/index.html      (campo "Tu correo" en el form; botón "Cancelar";
+                            éxito muestra el correo; el paso de plan ya no se abre)
+  frontend/js/registro.js  (openRegistroEmpresaCheck sin login; openRegistroModal
+                            abre directo al form + initRegistroCombo; submit sin
+                            sesión con correo; selectPlan/backToPlan null-safe)
+  frontend/sw.js           (v2.43 → v2.44)
+  (app.js NO cambia respecto de la etapa 2.1 ya deployada.)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_redesign22_$(date +%F).tar.gz \
+     frontend/index.html frontend/js/registro.js frontend/sw.js
+2) tar xzf /home/hepta/claude/retopa_redesign_stage22.tar.gz -C /
+3) cd /opt/retopa && docker compose down && docker compose up -d --build
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_redesign_stage22.js → 20/20  (390×844, Tailwind compilado:
+     · sin sesión abre directo al form, sin login, sin paso de plan
+     · campo correo required (type=email); correo inválido no envía y avisa
+     · submit sin sesión arma /leads SIN user_id, email/contact_email = correo,
+       contact_name = nombre del negocio, phone/contact_phone = WhatsApp, plan=basic
+     · éxito muestra el correo; botón "Cancelar"
+     · CON sesión: prellena correo de la cuenta y manda user_id + contact_name)
+  node harness_redesign_stage21.js → 22/22  (H1 bicolor + registro corto + logo opcional)
+  node harness_redesign_stage2.js  → 15/15  (hero/chips/buscador #1)
+  node harness_redesign_stage1.js  → 20/20  (chrome/nav/legal/es-PY)
+
+  Correr:  cd /opt/retopa/frontend && \
+     npx --yes tailwindcss@3.4.0 -i ./css/tailwind-main.css -o ./public/css/main.css \
+        --config tailwind.config.js && \
+     node /opt/retopa/_deploy/harnesses/harness_redesign_stage22.js
+════════════════════════════════════════════════════════════════════════════

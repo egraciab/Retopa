@@ -1,0 +1,82 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Fix de caché / "el sitio no se actualiza" (Service Worker)
+════════════════════════════════════════════════════════════════════════════
+
+EL PROBLEMA (tus dos síntomas eran la MISMA causa)
+──────────────────────────────────────────────────
+El Service Worker (PWA) usaba CACHE-FIRST para los estáticos: una vez que
+cacheaba un /js/*.js, NUNCA más consultaba la red — ni el hard refresh
+(Ctrl+Shift+R) lo evitaba, porque el SW corta antes de llegar al servidor.
+Solo borrar los datos del navegador lo desregistraba.
+
+Consecuencias que viste:
+  1) El header "mentía" que estabas logueado: corría un auth.js VIEJO (el nuevo
+     ya revalida la sesión al volver a la pestaña, al enfocar y cada 60s, y hace
+     auto-logout exacto al vencer el token — pero nunca llegaba a tu navegador).
+  2) Los deploys no aparecían (ej. el botón "enviar mail" del Embajador) hasta
+     borrar todo el historial. De hecho /admin NO se cacheaba (por eso el panel
+     admin sí se actualizaba), pero el sitio público y /embajador SÍ → pegados.
+
+LA SOLUCIÓN
+──────────────────────────────────────────────────
+Service Worker v2.40 con estrategia NETWORK-FIRST para JS/CSS y navegaciones:
+  · Online → SIEMPRE la última versión tras un deploy (el server ya manda
+    Cache-Control:no-cache + ETag → revalida con un 304 barato).
+  · Offline → recién ahí usa la caché (la PWA sigue funcionando sin conexión).
+  · Imágenes/fuentes → stale-while-revalidate (rápidas y se refrescan solas).
+  · /api /admin /cliente /empresa → nunca se interceptan (igual que antes).
+  · Se bumpeó la versión (v2.39 → v2.40): al activar, PURGA todas las cachés
+    viejas cache-first.
+Además, index.html ahora busca un SW nuevo al volver a la pestaña y cada 15 min,
+así hasta las pestañas abiertas mucho tiempo adoptan los deploys.
+
+IMPORTANTE — esta es la ÚLTIMA vez que hace falta limpiar
+──────────────────────────────────────────────────
+Los navegadores que hoy están "pegados" se auto-curan solos en la próxima
+visita: el navegador baja el sw.js nuevo (se sirve con no-cache), lo instala,
+purga las cachés viejas y recarga una vez. De ahí en más, cada deploy se ve en
+la siguiente carga SIN borrar nada.
+  · Tu navegador actual (el que ya venís usando pegado): una última vez, borrá
+    datos del sitio O abrí en incógnito para tomar el sw.js nuevo. Después nunca
+    más hace falta.
+
+ARCHIVOS MODIFICADOS
+──────────────────────────────────────────────────
+  frontend/sw.js         → estrategia network-first + versión v2.40 + purga
+  frontend/index.html    → chequeo periódico de actualización del SW
+                           (el auto-reload en 'controllerchange' ya existía)
+
+  (No se tocó auth.js: su lógica de sesión en tiempo real YA estaba correcta;
+   solo no llegaba al navegador por la caché.)
+
+DEPLOY  (subís el .tar.gz a /home/hepta/claude/ · proyecto en /opt/retopa/)
+──────────────────────────────────────────────────
+1) Respaldo rápido:
+      cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_sw_$(date +%F).tar.gz \
+        frontend/sw.js frontend/index.html
+
+2) Extraer sobre la raíz:
+      tar xzf /home/hepta/claude/retopa_sw_cache_fix.tar.gz -C /
+
+3) Reconstruir y levantar:
+      cd /opt/retopa && docker compose up -d --build
+
+   Sin migración de base. Deja el harness en /opt/retopa/_deploy/harnesses/.
+
+VERIFICACIÓN
+──────────────────────────────────────────────────
+  node harness_sw_cache.js   → 23/23  (estrategia del SW real, entorno simulado)
+
+  Probado: JS/CSS online = red (no caché vieja); offline = fallback a caché;
+  /embajador ya NO queda pegado; /admin y /api nunca interceptados; POST y
+  cross-origin ignorados; navegación con fallback a offline.html; imágenes SWR;
+  activate purga TODA caché v2.39.
+
+QUÉ VAS A NOTAR
+──────────────────────────────────────────────────
+  · Tras deployar y tomar el SW nuevo una vez: cada cambio futuro aparece en la
+    siguiente carga, sin borrar caché.
+  · Si tu token vence con la pestaña abierta, el header pasa a "deslogueado" solo
+    (al instante del vencimiento, o al volver a la pestaña / dentro de 1 min),
+    sin tener que ir a "Mi portal" para enterarte.
+════════════════════════════════════════════════════════════════════════════

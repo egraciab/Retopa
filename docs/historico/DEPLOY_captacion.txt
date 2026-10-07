@@ -1,0 +1,134 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Flujo Captación → Conversión (Verificar ficha desde el Lead)
+Deploy notes · reconstrucción del ciclo lead → oportunidad
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ CAMBIA (resumen para vos)
+────────────────────────────
+Los registros que entran desde la web (alta autogestionada) ya NO se tratan
+como "ventas". Ahora viven en un ciclo de CAPTACIÓN dentro de Leads:
+
+        Nuevo (por verificar)  →  Verificado   /   Descartado
+
+- En el detalle del Lead aparece el botón "Verificar ficha". Un solo clic:
+    1) marca la empresa como VERIFICADA (ya no hace falta ir a "Empresas"),
+    2) envía el correo de verificación al dueño (igual que antes),
+    3) crea una OPORTUNIDAD de onboarding/bienvenida SIN asignar.
+- Esa oportunidad cae arriba de todo en "Disparadores de venta" (Oportunidades),
+  marcada "sin asignar" en rojo. Desde ahí la derivás manualmente al embajador
+  con el selector que ya existía (POST /admin/signals/:id/assign).
+- Los leads de VENTA reales (Destacado / Pro / promo boost / reclamos) mantienen
+  intacto su pipeline comercial (Pendiente→Contactado→Negociando→Ganado/Perdido).
+
+El discriminador de captación es el PLAN: la ficha gratis = plan 'basic' (o sin
+plan) → captación. featured/premium/claim → venta. La marca notes.source=
+'web_register' se respeta como señal extra. (Antes dependía sólo de source, pero
+hay altas de ficha gratis que no la traen — p.ej. el caso "Showroom Syrocco".)
+Front (isCaptacionLead en config.js) y backend (filtro ?origin) usan el mismo
+predicado, así que KPIs y filtros siempre coinciden.
+
+════════════════════════════════════════════════════════════════════════════
+ARCHIVOS MODIFICADOS
+────────────────────────────
+BACKEND
+  backend/src/helpers/verifyFicha.js        (NUEVO — núcleo transaccional)
+  backend/src/routes/admin.js
+      · SIG_PRIO: prioriza 'onb_bienvenida' (THEN 0) → aparece primero
+      · POST /leads/:id/verify-ficha  (nuevo endpoint, usa el helper)
+      · validaciones de /leads/:id y /leads/:id/status aceptan
+        'verificado' y 'descartado'
+      · GET /leads: nuevo filtro ?origin=captacion|venta (PG16 IS JSON OBJECT,
+        seguro ante notes no-JSON)
+      · GET /leads: verificado/descartado ahora cuentan como "tratados" →
+        salen de "Activos" y van a "Archivados" (el backlog queda accionable)
+FRONTEND
+  frontend/admin/index.html
+      · rótulo del menú: "Leads" → "Captación / Leads"
+      · tarjetas KPI rediseñadas en 2 filas (Captación / Venta), clickables
+        para filtrar; nuevo filtro de origen; estados de captación en el dropdown
+  frontend/admin/js/config.js
+      · parseLeadNotes captura notes.source
+      · STATUS_CONFIG: estados 'verificado' y 'descartado'
+      · isCaptacionLead() / getCaptacionStatusLabel()
+      · título de página: "Leads" → "Captación / Leads"
+  frontend/admin/js/leads.js
+      · tabla y modal ramifican Captación vs Venta
+      · botón "Verificar ficha" + verifyFichaFromLead()
+      · loadLeadsStats() recalculado: KPIs captación/venta + tasa de
+        verificación + deltas (7 días / este mes); filterLeadsBy() para las
+        tarjetas; loadAdminLeads envía ?origin
+  frontend/admin/js/signals.js
+      · etiqueta 'Bienvenida / Onboarding' (SIG_META)
+      · params configurables: signal_onboarding_ttl_days, signal_msg_onb_bienvenida
+  frontend/embajador/js/opportunities.js
+      · etiqueta 'Bienvenida / Onboarding' (OPP_TRIG)
+
+════════════════════════════════════════════════════════════════════════════
+DEPLOY   (subís el .tar.gz a /home/hepta/claude/ · el proyecto vive en /opt/retopa/)
+────────────────────────────
+El tarball está rooteado en  opt/retopa/...  → se extrae directo con  -C /
+y cada archivo cae exactamente en su lugar dentro de /opt/retopa/.
+
+1) (Recomendado) Respaldo rápido de los archivos que se van a pisar:
+
+      cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_captacion_$(date +%F).tar.gz \
+        backend/src/routes/admin.js frontend/admin/index.html \
+        frontend/admin/js/config.js frontend/admin/js/leads.js frontend/admin/js/signals.js \
+        frontend/embajador/js/opportunities.js
+
+2) Extraer sobre la raíz (respeta la estructura /opt/retopa/...):
+
+      tar xzf /home/hepta/claude/retopa_captacion_verify.tar.gz -C /
+
+   Deja además las notas y los harnesses en  /opt/retopa/_deploy/
+   (fuera del código; podés borrar esa carpeta cuando quieras).
+
+3) Reconstruir y levantar:
+
+      cd /opt/retopa && docker compose up -d --build
+
+   No hay MIGRACIÓN de base de datos: el flujo reutiliza columnas existentes
+   (service_leads.status como texto, sales_signals con product_target='onboarding').
+
+3) (OPCIONAL) Personalizar la oportunidad de onboarding sin tocar código.
+   Los valores por defecto ya funcionan (TTL 21 días + mensaje en voseo).
+   Podés editarlos desde Admin → Disparadores de venta → Configuración, o por SQL:
+
+      cd /opt/retopa && docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<'SQL'
+      INSERT INTO site_config (key, value) VALUES
+        ('signal_onboarding_ttl_days', '21'),
+        ('signal_msg_onb_bienvenida',
+         '¡{business} se sumó a RetoPA y ya está verificada! Contactá al dueño para darle la bienvenida, ayudarlo a completar su ficha y presentarle los planes.')
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+      SQL
+
+   {business} se reemplaza por el nombre comercial de la empresa.
+
+════════════════════════════════════════════════════════════════════════════
+VERIFICACIÓN (harnesses incluidos en /opt/retopa/_deploy/harnesses/)
+────────────────────────────
+  node harness_verify_ficha.js       → 33/33  (helper real contra Postgres real)
+  node harness_leads_filters.js      → 18/18  (filtro origin + vistas, PG16 real)
+  node harness_leads_captacion.js    → 42/42  (UI real: tabla, modal, KPIs, filtros)
+  (regresión) harness_idle_refresh   → 15/15
+  (regresión) harness_session_expiry → 14/14
+
+Comprobado end-to-end:
+  · verificar marca businesses.verified y pasa el lead a 'verificado' (no 'won')
+  · crea 1 oportunidad onboarding SIN asignar (assigned_ambassador_id NULL)
+  · idempotente: no duplica si ya hay una onboarding activa para el negocio
+  · si la previa se descarta/expira, una nueva verificación la recrea
+  · no colisiona con otras señales del negocio (product_target distinto)
+  · TTL y mensaje configurables por site_config; correo sólo en la transición
+  · los leads de venta conservan su pipeline comercial intacto
+
+════════════════════════════════════════════════════════════════════════════
+QUÉ MIRAR DESPUÉS DE DEPLOYAR
+────────────────────────────
+  · Admin → Leads: un registro web se ve como "Nuevo · por verificar" con el
+    botón verde de escudo (Verificar ficha).
+  · Al verificar: toast de confirmación + aparece la Oportunidad en
+    "Disparadores de venta" arriba de todo, en rojo "sin asignar".
+  · Asignás la oportunidad a un embajador → le cae en su panel de Oportunidades
+    con la etiqueta "Bienvenida / Onboarding".
+════════════════════════════════════════════════════════════════════════════

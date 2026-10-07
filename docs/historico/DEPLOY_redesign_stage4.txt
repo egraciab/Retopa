@@ -1,0 +1,48 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Rediseño mobile (opción A) · ETAPA 4: la FICHA (perfil público)
+· solo frontend
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ ENTRA
+──────────────────────────────────────────────────
+1) BARRA DE ACCIONES FIJA AL PIE (mobile): Llamar · WhatsApp · Llegar (≥48px),
+   siempre visible mientras se ve la ficha. Reemplaza el CTA suelto de arriba.
+   · Llamar → tel:  · WhatsApp → buildWaUrl  · Llegar → Google Maps (coords o dirección)
+2) RATING sin "0.0": en el encabezado, si no hay reseñas muestra "Sin reseñas aún"
+   (antes mostraba "0.0"). Con reseñas: "4.6 • 8 reseñas". (CRITERIO #4)
+3) La ficha ahora se abre POR ENCIMA de la barra inferior del sitio (z-[85] > 80),
+   así el usuario queda "dentro" de la ficha y su barra de acciones no choca con la
+   barra de navegación. Se agrega un espaciador para que el contenido no quede tapado.
+4) REDES SOCIALES: ya existían y se mantienen (Instagram, Facebook, TikTok, LinkedIn,
+   X, YouTube) en el panel "Inicio". IMPORTANTE: están gateadas por plan
+   (básico 0 · Negocio Digital 2 · Empresa Pro 6) — es monetización intencional,
+   se preservó. Si querés que el plan básico también muestre alguna red, se cambia
+   el tope `maxSocial` en profile.js (avisame y lo ajusto).
+
+CRAWLERS / SEO (criterio #8): NO se tocó server.js. El SSR ya renderiza el
+<h1> = nombre del negocio y el rating sólo si > 0 (nunca "0.0"), así que la
+versión para bots ya cumple y queda idéntica.
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  frontend/index.html   (profileModal z-[60]→z-[85]; CSS .rp-ficha-actions/.rp-fa)
+  frontend/js/profile.js(rating "Sin reseñas aún" en el header; barra fija
+                         Llamar/WhatsApp/Llegar + espaciador; _mapsUrl)
+  frontend/sw.js        (v2.50 → v2.51)
+
+DEPLOY (solo frontend)
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_e4_$(date +%F).tar.gz \
+     frontend/index.html frontend/js/profile.js frontend/sw.js
+2) tar xzf /home/hepta/claude/retopa_redesign_stage4.tar.gz -C /
+3) cd /opt/retopa && docker compose down && docker compose up -d --build
+
+VERIFICACIÓN (harness en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_redesign_stage4.js → 12/12  (con el openProfile REAL:
+     modal abre y z-[85]; barra fija visible al pie (bottom≈844) con acciones ≥48px;
+     Llamar tel:/WhatsApp wa/Llegar maps; "Sin reseñas aún" sin "0.0"; con reseñas
+     muestra 4.6; redes presentes en Pro; básico 0 redes pero la barra sigue)
+  (stage1/2/2.1/2.2/3/3.2/3.3a/3.3b siguen verdes)
+
+Con esto quedan cubiertas las 4 etapas del rediseño mobile (opción A).

@@ -1,0 +1,56 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Mini-fichas: likes + aro de completitud   (SW v2.54)
+· frontend público. Sin backend. Sin migración.
+· Incluye TAMBIÉN el fix del reclamo (por si se deploya este solo).
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ ENTRA
+──────────────────────────────────────────────────
+1) MINI-FICHAS (js/search.js) — en la tarjeta compacta (home "Abiertos ahora" Y
+   resultados de búsqueda):
+   · LIKES del negocio: ❤️ N en la fila de estado, junto al rating. Solo si ≥1.
+   · ARO de completitud del perfil: badge circular chico sobre la esquina de la
+     miniatura, con el % adentro (mismo aro que la ficha, en compacto). Color por
+     nivel: ≥80 verde · ≥55 ámbar · ≥30 naranja · <30 gris. Se oculta si no hay dato.
+   Datos SIN tocar backend: GET /businesses ya devuelve "likeCount"
+   (COALESCE(b.like_count,0)) y "completion" (fn_profile_completion) por ficha.
+
+2) FIX RECLAMO (js/interactions.js) — el mismo del paquete v2.53: el modal de
+   "Reclamar empresa" ahora va POR ENCIMA de la ficha (z-index 10000) en vez de
+   quedar detrás; panel scrolleable en mobile. (Se incluye acá para que este
+   paquete deje el front en estado correcto aunque se deploye solo.)
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  frontend/js/search.js         (MODIFICADO — mini-fichas: aro + likes)
+  frontend/js/interactions.js   (MODIFICADO — fix z-index del reclamo)
+  frontend/sw.js                (VERSION → v2.54)
+
+DEPLOY (frontend; con rebuild + SW bumpeado)
+──────────────────────────────────────────────────
+1) Backup:
+     cp /opt/retopa/frontend/js/search.js       /home/hepta/claude/search.js.bak_$(date +%F)
+     cp /opt/retopa/frontend/js/interactions.js /home/hepta/claude/interactions.js.bak_$(date +%F)
+     cp /opt/retopa/frontend/sw.js              /home/hepta/claude/sw.js.bak_$(date +%F)
+2) Desempaquetar:
+     tar xzf /home/hepta/claude/retopa_minifichas.tar.gz -C /
+3) Rebuild (recompila Tailwind; NO se envía public/css/main.css):
+     cd /opt/retopa && docker compose up -d --build
+4) Prueba en el celu:
+   · Home: cada mini-ficha con aro (%) sobre la miniatura y ❤️ N si tiene likes.
+   · Ficha "No verificado" → "Sí, es mío" → el reclamo aparece ARRIBA.
+
+ORDEN CON EL PAQUETE DE RECLAMO (v2.53)
+──────────────────────────────────────────────────
+· Si ya deployaste retopa_fix_reclamo.tar.gz (v2.53): deployá este después (v2.54).
+· Si NO deployaste el de reclamo: podés deployar SOLO este; ya trae el fix.
+· No deployes el de reclamo (v2.53) DESPUÉS de este (v2.54): iría para atrás la
+  versión del SW.
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_minifichas.js    → 9/9  (390px: aro por umbral 95/62/25, % correcto,
+     likes solo si ≥1, sin errores) + screenshot minifichas_390.png
+  node harness_claim_zindex.js  → 7/7  (reclamo z-index 10000 por encima de la
+     ficha(85) y la barra(86), panel scrolleable)
+════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,75 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Fix bots en "Conexiones" + "Notificar empresas" con recalcular/parámetros
+════════════════════════════════════════════════════════════════════════════
+
+A) FIX: los CRAWLERS ya no inflan "Conexiones" (Dashboard)
+──────────────────────────────────────────────────
+El contador de visitas del sitio (site_visits) registraba TODA visita a "/" y
+"/negocios*", SIN saltear bots — aunque el mismo archivo ya tenía isCrawler() y
+las vistas de ficha SÍ lo usaban. Por eso Googlebot y demás crawlers contaban
+como "visitantes únicos" y el Sitio salía muy por encima de las fichas.
+
+Ahora el middleware de pageview aplica el MISMO isCrawler() que las fichas:
+solo se cuentan visitas HUMANAS. Después del deploy, "Conexiones" refleja
+personas reales (el desfasaje Sitio≥fichas se vuelve sano: no todo el que entra
+al home abre una ficha, pero ya sin inflado de bots).
+  · No es retroactivo: limpia de acá en adelante, no borra lo ya contado.
+
+B) "NOTIFICAR EMPRESAS" — recalcular + parámetros antes de lanzar
+──────────────────────────────────────────────────
+Antes, "Iniciar campaña" disparaba a TODOS los elegibles de una, a ciegas.
+Ahora, arriba del botón hay un bloque "Parámetros de la campaña":
+
+  · 🔢 Recalcular (dry-run): dice EXACTO cuántas y a quiénes se enviaría
+    (respetando cooldown + filtros + tope), con muestra, SIN enviar nada.
+  · 🎯 Filtros: Fuente, Ciudad (exacta, sin distinguir mayúsculas) y Score
+    mínimo (0–100) para priorizar fichas más completas.
+  · 📦 Tope por tanda: enviás de a N (ej. 300) en vez de miles de golpe —
+    cuida la reputación de envío. La campaña ordena nunca-notificadas primero,
+    así la próxima tanda sigue por donde quedó. Al terminar te dice cuántas
+    QUEDAN elegibles.
+  · 🔁 Incluir re-notificaciones (cooldown): checkbox. Marcado = nunca
+    notificadas + las que superaron el cooldown; desmarcado = SOLO las que
+    nunca fueron notificadas.
+
+  El "Iniciar campaña" ahora recalcula y te confirma con el número exacto
+  ("se enviarían X de Y elegibles · filtros…") antes de arrancar.
+
+ARCHIVOS MODIFICADOS
+──────────────────────────────────────────────────
+  frontend/server.js                         (pageview middleware saltea crawlers)
+  backend/src/routes/admin.notify.routes.js  (buildCampaignFilter + endpoint
+                                              /campaign-preview + /campaign con
+                                              filtros, tope y "remaining")
+  frontend/admin/index.html                  (bloque "Parámetros de la campaña"
+                                              + botón Recalcular)
+  frontend/admin/js/notify.js                (_campaignParams, recalcularCampaign,
+                                              launchCampaign con parámetros)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_notify_$(date +%F).tar.gz \
+     frontend/server.js backend/src/routes/admin.notify.routes.js \
+     frontend/admin/index.html frontend/admin/js/notify.js
+2) tar xzf /home/hepta/claude/retopa_notify_bots.tar.gz -C /
+3) cd /opt/retopa && docker compose up -d --build
+   Sin migración de base.
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_pageview_bots.js   → 19/19  (usa la isCrawler() REAL de server.js:
+     detecta Googlebot/Bing/Semrush/Ahrefs/WhatsApp, deja pasar humanos, y el
+     middleware ya gatea con !isCrawler)
+  node harness_notify_campaign.js → 19/19  (Postgres real: elegibilidad, fuente,
+     ciudad case-insensitive, score mín., toggle cooldown, tope y "remaining")
+  node harness_notify_ui.js       → 18/18  (navegador real: Recalcular e Iniciar
+     mandan source/city/min_score/limit/include_cooldown correctos)
+
+NOTA — por qué el desfasaje NO era un ataque
+──────────────────────────────────────────────────
+El tracker del sitio solo registra "/" y "/negocios*". Un escáner de
+vulnerabilidades golpea rutas tipo /wp-admin, /.env — que ni se registran acá.
+El inflado venía de crawlers legítimos (Googlebot es tu principal "publicista"
+vía Search Console) pegándole a home/listados/fichas. Ahora quedan fuera del
+conteo humano.
+════════════════════════════════════════════════════════════════════════════

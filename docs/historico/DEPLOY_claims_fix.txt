@@ -1,0 +1,87 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Claims: sincronía con Dashboard + avisos por email + panel escalable
+════════════════════════════════════════════════════════════════════════════
+
+A) FIX: aprobar un claim ahora SÍ se refleja en el Dashboard (Ganado)
+──────────────────────────────────────────────────
+Causa raíz: al aprobar, el lead quedaba en status='completed', pero el embudo y
+los badges reconocen 'won'/'closed' como "Ganado". 'completed' (y 'new') no
+estaban mapeados → se veían como "Pendiente". Por eso los 3 claims aprobados
+seguían "PENDIENTE".
+
+  · Aprobar un claim ahora deja el lead en 'won' (Ganado) — se ve verde en
+    "Leads recientes" y suma en el embudo (Ganados).
+  · Los claims se crean como 'pending' (antes 'new'), así cuentan en Pendientes.
+  · Robustez: el embudo y los badges también reconocen 'completed'→Ganado y
+    'new'→Pendiente, por si quedaran filas viejas.
+
+  ⚠ IMPORTANTE — MIGRAR los 3 (o N) claims ya aprobados:
+  Los que aprobaste ANTES de este deploy están en 'completed' en la base. El
+  código nuevo ya los muestra bien (mapea completed→Ganado), pero para dejar la
+  base prolija corré esta migración una sola vez (paso 3 del deploy).
+
+B) EMAIL de aviso cuando entra un CLAIM (mismo flujo que Leads)
+──────────────────────────────────────────────────
+El claim por FORMULARIO público no mandaba ningún correo (por eso "no me llegan
+notificaciones"). El claim por token sí lo hacía. Ahora el formulario público
+manda lo mismo:
+  · claimReceived → al que reclama (confirmación de recepción).
+  · claimAdminAlert → a cada buzón de site_config.leads_emails (aviso interno).
+  Requisito: tené cargado 'leads_emails' en Configuración (igual que los leads).
+
+C) PANEL DE CLAIMS — escalable (paginado + filtro + búsqueda server-side)
+──────────────────────────────────────────────────
+Antes traía TODOS los claims y filtraba en el navegador → no escala. Ahora:
+  · Buscador (empresa, dueño o email) con debounce.
+  · Filtro por estado (tarjetas Todos/Pendientes/Aprobados/Rechazados) que
+    consulta al backend; las tarjetas muestran conteos GLOBALES.
+  · Paginación real (25 por página) — solo trae lo que se ve.
+
+ARCHIVOS MODIFICADOS
+──────────────────────────────────────────────────
+  backend/src/routes/admin.js          (/claims paginado+filtro+búsqueda+stats;
+                                        approve → lead 'won'; embudo cuenta
+                                        completed/new)
+  backend/src/routes/claim.routes.js   (crea lead 'pending'; approve → 'won')
+  backend/src/routes/directory.js      (form público de claim → claimReceived +
+                                        claimAdminAlert a leads_emails)
+  frontend/admin/js/claims.js          (búsqueda/filtro/paginación server-side)
+  frontend/admin/js/config.js          (STATUS_CONFIG: new→Pendiente,
+                                        completed→Ganado)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_claimsfix_$(date +%F).tar.gz \
+     backend/src/routes/admin.js backend/src/routes/claim.routes.js \
+     backend/src/routes/directory.js frontend/admin/js/claims.js \
+     frontend/admin/js/config.js
+2) tar xzf /home/hepta/claude/retopa_claims_fix.tar.gz -C /
+3) MIGRACIÓN (una sola vez) — pasar los claims ya aprobados a 'won':
+   docker compose exec -T db psql -U retopa -d retopa <<'SQL'
+   UPDATE service_leads SET status='won',     updated_at=NOW()
+     WHERE service_type='claim' AND status='completed';
+   UPDATE service_leads SET status='pending', updated_at=NOW()
+     WHERE service_type='claim' AND status='new';
+   SQL
+   (ajustá -U/-d si tu usuario/base difieren; el nombre real está en tu .env
+    como POSTGRES_USER / POSTGRES_DB.)
+4) cd /opt/retopa && docker compose up -d --build
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_claims_status.js → 15/15  (Postgres: approve deja el lead 'won' y
+     el embudo lo cuenta como Ganado; legacy completed/new también; + badges)
+  node harness_claim_email.js   →  9/9   (monta el router real: el form de claim
+     dispara claimReceived + claimAdminAlert a leads_emails)
+  node harness_claims_list.js   → 18/18  (Postgres: filtro por estado, búsqueda
+     por empresa/dueño/email, paginación y stats globales)
+  node harness_claims_ui.js     → 13/13  (navegador real: filtro/búsqueda/página
+     alimentan la URL; tarjetas usan stats globales)
+  (regresión OK: harness_claims 19/19 · harness_claim_access 22/22 ·
+   harness_claim_authz 17/17)
+
+NOTA
+──────────────────────────────────────────────────
+José Roberto ya aparecía "GANADO" porque su lead estaba en 'won' (bien). Los
+otros 3 estaban en 'completed' → con la migración del paso 3 quedan idénticos.
+════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,49 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — 3 ajustes de UI: Plantillas en pestañas + Semáforo "Visitas a fichas"
+             + panel "Reclamos de empresas"
+════════════════════════════════════════════════════════════════════════════
+
+A) PLANTILLAS agrupadas en PESTAÑAS
+──────────────────────────────────────────────────
+Ya eran 20+ y la pantalla era larguísima. Ahora están en 6 pestañas:
+  🚀 Usuarios & uso (6) · ⭐ Actividad (3) · 💳 Planes & pagos (7)
+  🏢 Reclamos (2) · 📣 Captación (2) · 🔐 Cuenta (1)
+  · Solo se muestran las tarjetas del grupo activo → mucho más corto.
+  · Cada tarjeta conserva Ver preview / Prueba / Guardar igual que antes.
+  · El buscador de envío de abajo sigue funcionando con CUALQUIER plantilla.
+  · Robusto: si mañana agregás una plantilla sin grupo, cae sola en "📦 Otras".
+
+B) SEMÁFORO — "Visitas" → "Visitas a fichas" (+ tooltip)
+──────────────────────────────────────────────────
+La tarjeta ahora dice "Visitas a fichas" con un ℹ️ que aclara: son aperturas de
+ficha del mes (business_views); el Dashboard mide visitantes únicos de TODO el
+sitio, por eso los números difieren. Fin del "ruido" al compararlos.
+
+C) PANEL CLAIMS → título "Reclamos de empresas"
+──────────────────────────────────────────────────
+El encabezado del panel pasa de "Claims" a "Reclamos de empresas" (ya muestra
+todos los estados, no solo pendientes). El ítem del menú lateral no se toca.
+
+ARCHIVOS MODIFICADOS
+──────────────────────────────────────────────────
+  frontend/admin/js/templates.js   (TPL_GROUPS + renderTemplatesUI +
+                                    switchTplGroup + _renderTplCard)
+  frontend/admin/index.html        (KPI Semáforo "Visitas a fichas" + tooltip)
+  frontend/admin/js/claims.js      (título "Reclamos de empresas")
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_uitweaks_$(date +%F).tar.gz \
+     frontend/admin/js/templates.js frontend/admin/index.html frontend/admin/js/claims.js
+2) tar xzf /home/hepta/claude/retopa_ui_tweaks.tar.gz -C /
+3) cd /opt/retopa && docker compose up -d --build
+   Solo frontend, sin migración de base.
+
+VERIFICACIÓN (harness en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_templates_tabs.js → 14/14  (navegador real: cada plantilla en un
+     solo grupo, 6 pestañas, la pestaña activa filtra las tarjetas, las tarjetas
+     conservan sus acciones; + contrato de los dos renames)
+  (regresión OK: users_ui 17/17 · users_filter_ui 13/13 · bulk_email_ui 19/19 ·
+   claims_ui 13/13 · engagement_templates 31/31)
+════════════════════════════════════════════════════════════════════════════

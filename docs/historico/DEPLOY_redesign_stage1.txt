@@ -1,0 +1,73 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Rediseño mobile (opción A) · ETAPA 1/3: chrome global + barra inferior
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ ENTRA EN ESTA ETAPA
+──────────────────────────────────────────────────
+Backbone de navegación de la opción A + correcciones de confianza. NO incluye
+todavía el hero mobile-first ni el rediseño de resultados/ficha (etapas 2 y 3).
+
+1) Header (global) a 60px:
+   · Eliminada la barra superior "Paraguay 🇵🇾 / Soporte" (Soporte pasó al menú
+     y al footer).
+   · Logo + wordmark a la izquierda; "Ingresar" como TEXTO (≥44px) y menú a la
+     derecha. El botón "Registrar mi empresa" del header ahora solo se ve en
+     desktop; en mobile la acción vive en la barra inferior ("Mi negocio") y en
+     el bloque de registro.
+   · El wordmark "RetoPA" DEJA de ser <h1> (pasa a <div>); el "PA" usa #C9951F
+     (dorado que llega a contraste sobre blanco).
+   · Único <h1> real de la home = el título del hero.
+2) Barra de navegación inferior (nueva, fija, solo mobile <1024px):
+   · Ítems desde una CONSTANTE (RP_NAV), no hardcodeados. Hoy: Inicio · Buscar ·
+     Ofertas · Mi negocio (4 ítems). "Guardados" queda tras un flag
+     (RP_FEATURE_GUARDADOS=false) hasta que exista el módulo de usuarios
+     consumidores.
+   · "Mi negocio": con sesión → /cliente; sin sesión → registro.
+   · El <body> reserva 70px abajo para que la barra no tape contenido.
+   · Se eliminó el botón flotante de WhatsApp (su rol lo cubre la barra).
+3) Confianza / contenido:
+   · Términos de uso y Política de privacidad: páginas REALES (/terminos.html y
+     /privacidad.html) enlazadas desde el formulario de registro y el footer.
+     (Son una base editable; conviene revisarlas con asesoría legal.)
+   · Helper de números es-PY global (rpFmtInt / rpFmtGs → "14.468" · "Gs. 199.000")
+     y aplicado al contador del hero. El resto de números se migran en etapa 2/3.
+4) Service worker: v2.40 → v2.41 (invalida caché estática; el chrome nuevo se ve
+   en la siguiente carga sin borrar caché a mano).
+
+NO se tocó server.js (rama de crawlers/SEO intacta) ni la base ni endpoints.
+
+ARCHIVOS MODIFICADOS / NUEVOS
+──────────────────────────────────────────────────
+  frontend/index.html        (tokens CSS, header, barra inferior, footer, links)
+  frontend/js/app.js         (contador del hero en es-PY)
+  frontend/sw.js             (v2.41)
+  frontend/terminos.html     (NUEVO — página real)
+  frontend/privacidad.html   (NUEVO — página real)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_redesign1_$(date +%F).tar.gz \
+     frontend/index.html frontend/js/app.js frontend/sw.js
+2) tar xzf /home/hepta/claude/retopa_redesign_stage1.tar.gz -C /
+3) cd /opt/retopa && docker compose down && docker compose up -d --build
+   El --build recompila Tailwind (Dockerfile) escaneando el markup nuevo, así que
+   las clases nuevas quedan en /public/css/main.css automáticamente.
+   Rollback: reextraer el backup del paso 1 y volver a levantar.
+
+VERIFICACIÓN (harness en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_redesign_stage1.js → 20/20  (navegador real 390×844, con Tailwind
+     compilado: sin barra superior, sin FAB, header 60px, wordmark no-h1, un solo
+     h1, "Registrar" oculto en mobile, "Ingresar" ≥44px, barra inferior fija de 4
+     ítems que no tapa contenido, links reales de términos/privacidad, es-PY, y
+     /terminos.html + /privacidad.html responden 200 con su H1)
+
+CRITERIOS DE ACEPTACIÓN cubiertos por esta etapa
+──────────────────────────────────────────────────
+  #3 barra inferior en home (resultados/ficha llegan en etapa 2/3) · #5 términos
+  y privacidad reales desde el registro · #6 separador de miles (helper + hero) ·
+  #8 crawlers sin cambios (server.js intacto).
+  Pendientes para etapa 2 (Home hero: buscador arriba del pliegue #1, chips,
+  bloque dorado, "abiertos ahora") y etapa 3 (Resultados #2/#4 y Ficha).
+
+════════════════════════════════════════════════════════════════════════════

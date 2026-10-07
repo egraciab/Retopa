@@ -1,0 +1,60 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — FIX: el modal de "Reclamar empresa" quedaba DETRÁS de la ficha
+· cambio SOLO en frontend público (js/interactions.js + sw.js). Sin backend.
+════════════════════════════════════════════════════════════════════════════
+
+SÍNTOMA
+──────────────────────────────────────────────────
+Al tocar "Sí, es mío" (o la cinta dorada "¿Sos el dueño?") el formulario de
+reclamo se abría, pero quedaba POR DETRÁS de la ficha: no se podía ver ni usar.
+
+CAUSA (no fue el fix de distancias)
+──────────────────────────────────────────────────
+Problema de z-index / apilamiento:
+  · #profileModal (la ficha)            → z-index 85
+  · .rp-ficha-actions (barra fija, E4)  → z-index 86   ← agregada en la Etapa 4
+  · #claimModal (reclamo)               → z-index 80   ← QUEDABA ABAJO
+Como 80 < 85 y 80 < 86, el reclamo se dibujaba detrás de la ficha y de la barra.
+El fix de distancias no tocó esto (su único fixed nuevo es un toast con
+pointer-events:none, que no tapa nada). El desajuste entró con la barra fija de
+la Etapa 4.
+
+FIX (js/interactions.js)
+──────────────────────────────────────────────────
+  · El modal de reclamo se eleva por encima de todo el sitio público:
+    z-index 10000 (las hojas del perfil llegan a 9991). Así queda SIEMPRE arriba
+    de la ficha (85) y de la barra de acciones (86).
+  · Bonus mobile-first: el panel del formulario ahora es scrolleable
+    (max-height:90vh; overflow-y:auto), para que en pantallas chicas no se corte
+    si el teclado achica el viewport.
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  frontend/js/interactions.js   (MODIFICADO — z-index del modal + panel scrolleable)
+  frontend/sw.js                (VERSION v2.52 → v2.53, para invalidar caché)
+
+DEPLOY (frontend; con rebuild + SW bumpeado)
+──────────────────────────────────────────────────
+1) Backup rápido:
+     cp /opt/retopa/frontend/js/interactions.js /home/hepta/claude/interactions.js.bak_$(date +%F)
+     cp /opt/retopa/frontend/sw.js              /home/hepta/claude/sw.js.bak_$(date +%F)
+2) Desempaquetar:
+     tar xzf /home/hepta/claude/retopa_fix_reclamo.tar.gz -C /
+3) Rebuild frontend (NO se envía public/css/main.css):
+     cd /opt/retopa && docker compose up -d --build
+4) Prueba en el celu: abrí una ficha "No verificado" → "Sí, es mío" → el formulario
+   de reclamo debe aparecer ARRIBA, centrado, y cerrarse tocando fuera o la X.
+
+NOTA DE ORDEN CON LAS MINI-FICHAS
+──────────────────────────────────────────────────
+Este fix usa el SW v2.53. Las mini-fichas (likes + aro) se re-emiten como v2.54
+para que apilen DESPUÉS de este. Orden recomendado: primero este fix (v2.53),
+luego mini-fichas (v2.54). Descartá el tarball viejo de mini-fichas que estaba
+marcado v2.53.
+
+VERIFICACIÓN (harness en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_claim_zindex.js  → 7/7  (390px: modal existe y es fixed, z-index
+     10000 por encima de ficha(85) y barra(86), al centro y al pie el reclamo
+     tapa la ficha/barra, panel scrolleable, sin artefactos)
+════════════════════════════════════════════════════════════════════════════

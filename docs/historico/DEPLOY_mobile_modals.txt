@@ -1,0 +1,66 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Pasada MOBILE del panel cliente: modales sin botones escondidos
+(consolida el fix del recorte de logo + 2 hallazgos del mismo patrón)
+════════════════════════════════════════════════════════════════════════════
+
+CONTEXTO
+──────────────────────────────────────────────────
+Tras el bug del recorte de logo (botones fuera de pantalla con fotos grandes),
+hice una auditoría de TODOS los modales centrados del panel del cliente buscando
+el mismo patrón: overlay centrado + tarjeta sin tope de altura → los botones se
+van abajo de la pantalla en celulares o con contenido largo.
+
+Resultado: la mayoría de los modales YA estaban bien (editar empresa, galería,
+planes, promos, bottom-sheets: todos con max-height + overflow-y:auto). Aparte
+del recorte, encontré 2 casos más del mismo patrón.
+
+QUÉ SE ARREGLA
+──────────────────────────────────────────────────
+1) 🖼️ Recorte de logo/portada (#cropperModal) — YA lo viste: columna flex con
+   tope 92dvh; header y botones fijos; el área de imagen se acota. Con fotos
+   verticales grandes, "Guardar imagen" siempre visible.
+2) 🚀 Selector "¿Para qué empresa?" del boost (#boostBizModal) — si el cliente
+   tenía muchas empresas, la lista crecía y "Cancelar" se iba de pantalla. Ahora
+   la tarjeta tiene tope de altura y scrollea.
+3) 👋 Wizard de bienvenida del dashboard (#welcomeWizard) — tenía overflow:hidden
+   sin tope; en pantallas chicas los botones "Atrás/Siguiente" podían quedar
+   cortados. Ahora tope de altura + scroll.
+
+Detalle importante de robustez: TODOS los topes usan `max-height:Nvh` como
+FALLBACK antes de `max-height:Ndvh`. Así funcionan también en navegadores que
+no soportan `dvh` (el `dvh` es lo ideal en mobile porque descuenta la barra de
+URL; el `vh` cubre a los que no lo tienen).
+
+ARCHIVOS MODIFICADOS
+──────────────────────────────────────────────────
+  frontend/cliente/js/businesses.js   (#cropperModal — recorte de imagen)
+  frontend/cliente/js/promotions.js   (#boostBizModal — selector de empresa)
+  frontend/cliente/js/dashboard.js    (#welcomeWizard — bienvenida)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_mobilemodals_$(date +%F).tar.gz \
+     frontend/cliente/js/businesses.js frontend/cliente/js/promotions.js \
+     frontend/cliente/js/dashboard.js
+2) tar xzf /home/hepta/claude/retopa_mobile_modals.tar.gz -C /
+3) cd /opt/retopa && docker compose up -d --build
+   Solo frontend, sin migración. (Los clientes toman el JS nuevo al recargar;
+   el Service Worker network-first ya lo sirve en la próxima carga.)
+   NOTA: este paquete YA incluye el fix del recorte de logo — si desplegaste el
+   anterior (retopa_cropper_mobile), este lo reemplaza sin problema.
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_cropper_mobile.js → 9/9   (viewport iPhone 390×844, foto vertical
+     1:5, markup REAL: botones dentro de pantalla; reproduce el bug viejo)
+  node harness_mobile_modals.js  → 13/13 (escanea TODOS los modales centrados del
+     cliente y exige tope de altura; verifica el fallback vh antes de cada dvh;
+     y prueba el boost con 15 empresas: la card entra y "Cancelar" es alcanzable)
+
+PARKED / próximo (opcional)
+──────────────────────────────────────────────────
+  · Unificar los modales que aún usan solo `vh` (galería, planes, promo, hepta)
+    a `dvh` con fallback, por consistencia. Hoy funcionan (scrollean), es sólo
+    prolijidad de mobile.
+  · Pasada de "tap targets" (tamaño mínimo de botones/íconos chicos) en mobile.
+════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,66 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Fix favicon en Google + nombre "RetoPA" (SEO del home)
+· frontend público. Sin backend, sin migración. SW v2.54 → v2.55.
+════════════════════════════════════════════════════════════════════════════
+
+DIAGNÓSTICO (por qué salía el mundito gris)
+──────────────────────────────────────────────────
+1) El home NO tenía <link rel="icon"> estándar ni /favicon.ico. Solo declaraba
+   manifest + apple-touch-icon → Google no encontraba favicon.
+2) El único ícono referenciado estaba en /api/v2/pwa-icon-*.png, y robots.txt tiene
+   "Disallow: /api/" → Googlebot-Image NO podía descargarlo. Doble bloqueo.
+3) Google mostraba "retopa.com.py" como nombre porque el home no tenía JSON-LD
+   WebSite ni og:site_name.
+
+QUÉ CAMBIA
+──────────────────────────────────────────────────
+· index.html (<head>): se agregan íconos en rutas ESTÁTICAS y permitidas por robots:
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="48x48"   href="/img/favicon-48.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/img/icon-192.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/img/apple-touch-icon.png">
+  + <meta property="og:site_name" content="RetoPA">
+  + JSON-LD WebSite { name:"RetoPA", url:"https://retopa.com.py/" }
+· favicon.ico (NUEVO, en la raíz servida) — .ico multi-tamaño 16/32/48, generado
+  desde tu logo real (img/icon-512.png).
+· img/favicon-48.png (NUEVO) — 48×48, el tamaño que prefiere Google.
+· manifest.json: los íconos pasan de /api/v2/pwa-icon-* a /img/icon-* (así no quedan
+  bloqueados por robots ni para Google ni para la PWA).
+· sw.js: v2.54 → v2.55 (invalida caché del home).
+
+  NOTA: no se toca /api ni el robots.txt. Los íconos ahora viven en /favicon.ico y
+  /img (ambas permitidas). El apple-touch-icon que apuntaba a /api quedó reemplazado.
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  frontend/index.html          (MODIFICADO — <head>: rel=icon, og:site_name, JSON-LD)
+  frontend/manifest.json        (MODIFICADO — íconos a /img)
+  frontend/favicon.ico          (NUEVO)
+  frontend/img/favicon-48.png   (NUEVO)
+  frontend/sw.js                (VERSION → v2.55)
+
+DEPLOY (frontend; con rebuild)
+──────────────────────────────────────────────────
+1) Backup rápido:
+     cp /opt/retopa/frontend/index.html    /home/hepta/claude/index.html.bak_$(date +%F)
+     cp /opt/retopa/frontend/manifest.json /home/hepta/claude/manifest.json.bak_$(date +%F)
+     cp /opt/retopa/frontend/sw.js         /home/hepta/claude/sw.js.bak_$(date +%F)
+2) Desempaquetar:
+     tar xzf /home/hepta/claude/retopa_favicon_seo.tar.gz -C /
+3) Rebuild:
+     cd /opt/retopa && docker compose up -d --build
+4) Verificación rápida (deben responder 200 y no estar bloqueados):
+     curl -sI https://retopa.com.py/favicon.ico | head -1
+     curl -s  https://retopa.com.py/ | grep -i 'rel="icon"'
+     curl -s  https://retopa.com.py/robots.txt        # confirmá que /img NO está en Disallow
+5) Google (para acelerar):
+     Search Console → Inspección de URL → https://retopa.com.py/ → Solicitar indexación.
+   El favicon puede tardar días/semanas aunque todo esté bien — es normal.
+
+VERIFICACIÓN (harness en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_favicon_seo.js /opt/retopa/frontend   → 14/14
+   (rel=icon a /favicon.ico y /img · ningún ícono bajo /api · favicon.ico con tamaño
+    48 · favicon-48.png 48×48 · og:site_name RetoPA · JSON-LD WebSite name RetoPA ·
+    manifest en /img · y CRUCE contra el robots.txt real: ningún ícono en ruta Disallow)
+════════════════════════════════════════════════════════════════════════════

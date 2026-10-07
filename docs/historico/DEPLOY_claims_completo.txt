@@ -1,0 +1,62 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — CLAIMS COMPLETO (unificación + acceso del dueño) — paquete único
+════════════════════════════════════════════════════════════════════════════
+
+Este paquete incluye TODO lo de reclamos, acumulado. Si aplicás esto, NO necesitás
+los tarballs anteriores de claims (retopa_claims_fix / retopa_claim_access): sus
+cambios ya están todos acá.
+
+QUÉ RESUELVE (las dos etapas juntas)
+──────────────────────────────────────────────────
+1) UNIFICACIÓN: el formulario público de reclamo ahora marca la ficha
+   (claim_status='pending') → cae en el panel Claims (no solo en Leads). Leads
+   excluye los reclamos. El panel Claims muestra origen (Formulario/Cuenta),
+   contacto, mensaje y evidencia.
+2) ACCESO DEL DUEÑO ("reloj suizo"): al APROBAR, se crea/vincula la cuenta del
+   reclamante como dueño y —si es nueva— se le envía un email de ACTIVACIÓN para
+   crear su contraseña. Para reclamos ya aprobados sin cuenta (José Roberto), el
+   botón "🔑 Dar acceso al dueño" en Claims hace lo mismo.
+
+ARCHIVOS INCLUIDOS
+──────────────────────────────────────────────────
+  backend/src/routes/directory.js          (formulario público marca claim_status)
+  backend/src/routes/admin.js              (Leads excluye claim · /claims enriquecido
+                                            · approve provisiona · grant-access)
+  backend/src/config/mail.js               (template claimActivate)
+  backend/src/helpers/claimAccess.js       (NUEVO — provisión de acceso)
+  frontend/admin/js/claims.js              (origen/contacto/mensaje/evidencia + botón acceso)
+  sql/2026-08-30_backfill_claim_status.sql (rescata reclamos por formulario ya existentes)
+
+DEPLOY  (subís el .tar.gz a /home/hepta/claude/ · proyecto en /opt/retopa/)
+──────────────────────────────────────────────────
+1) Respaldo:
+      cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_claims_full_$(date +%F).tar.gz \
+        backend/src/routes/directory.js backend/src/routes/admin.js \
+        backend/src/config/mail.js frontend/admin/js/claims.js
+2) Extraer:
+      tar xzf /home/hepta/claude/retopa_claims_completo.tar.gz -C /
+3) Backfill (rescata reclamos por formulario viejos, incl. José Roberto si aún
+   no lo habías rescatado):
+      cd /opt/retopa && docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+        < sql/2026-08-30_backfill_claim_status.sql
+4) Reconstruir:
+      cd /opt/retopa && docker compose up -d --build
+   Sin migración de base (usa columnas existentes: claim_status, users.reset_token,
+   user_businesses).
+
+   Nota: el backfill y todo el paquete son idempotentes — si ya aplicaste los
+   tarballs anteriores, volver a correr esto no rompe nada.
+
+DESPUÉS DE DEPLOYAR — José Roberto
+──────────────────────────────────────────────────
+  Admin → Claims → su tarjeta (aprobada) → botón "🔑 Dar acceso al dueño".
+  Le llega el email de activación; crea su contraseña y gestiona su ficha en /cliente.
+
+VERIFICACIÓN (harnesses incluidos en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_claims.js        → 19/19  (formulario marca claim_status; /claims
+      trae origen/contacto/mensaje; guardas 400/409; backfill)
+  node harness_claim_access.js  → 22/22  (crea/vincula cuenta dueño + activación;
+      el link crea la contraseña y habilita login; reusa cuenta; idempotente)
+  node harness_leads_filters.js → 18/18  (claim excluido de Captación/Leads)
+════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,78 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Rediseño mobile (opción A) · ETAPA 2.1 (delta sobre la Etapa 2)
+H1 del hero bi-color desde site_config  +  registro de "Negocio" CORTO
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ ENTRA
+──────────────────────────────────────────────────
+A) H1 del hero configurable desde site_config, en BI-COLOR
+   · El H1 vuelve a leerse de site_config.hero_title (como el resto del sitio).
+   · Se renderiza en dos colores automáticamente: por defecto la ÚLTIMA palabra
+     va en dorado (#E8B84B), igual que "hoy?" hoy. Si querés controlar qué tramo
+     va dorado, envolvelo con **asteriscos** en el texto de site_config:
+        "¿Qué necesitás **hoy**?"        → "hoy" dorado
+        "Tu ciudad, un **click**"        → "click" dorado
+        "Encontrá tu **negocio** ideal"  → "negocio" dorado
+     Sin ** , se dora la última palabra. El texto se ESCAPA (no se puede inyectar
+     HTML desde site_config).
+   · Si site_config no trae hero_title, queda el H1 estático "¿Qué necesitás hoy?".
+
+B) Formulario de registro de "Negocio" ACORTADO (la puerta de entrada)
+   · Antes pedía ~15 campos (nombre comercial, razón social, RUC, categoría,
+     descripción, 2 teléfonos, email, dirección, ciudad, web, logo + datos de
+     gestión). Ahora pide SOLO 4:
+        - Nombre del negocio
+        - Categoría
+        - Ciudad
+        - WhatsApp (con prefijo país)
+   · El resto (RUC, fotos, horarios, dirección, web, descripción) se completa
+     después desde el panel del cliente. Mensaje visible: "Publicá tu negocio en
+     30 segundos. Las fotos, horarios, dirección y demás los completás después".
+   · SIN CAMBIOS DE BACKEND: POST /leads solo exige name/phone/email/contact_name/
+     contact_email. Se derivan del usuario logueado (email/nombre) y del WhatsApp
+     (phone y contact_phone = WhatsApp). Validado.
+   · El teléfono queda cubierto por el WhatsApp (sube el % de fichas con teléfono,
+     que es el techo de indexación).
+
+Funcionalidad preservada: flujo de login/registro (openRegistroEmpresaCheck →
+selectPlan → registroForm), comboboxes de categoría/ciudad (initRegistroCombo),
+envío a /leads, éxito (#registroSuccess), cierre de modal. clearImageUpload() se
+hizo null-safe (ya no existe la zona de subida en el form corto).
+
+ARCHIVOS MODIFICADOS (delta de la etapa 2)
+──────────────────────────────────────────────────
+  frontend/index.html      (H1 con id="heroTitle" + #registroForm corto de 4 campos)
+  frontend/js/app.js       (handler hero_title → rpBicolorTitle(); nueva función global)
+  frontend/js/registro.js  (submit null-safe + defaults del usuario; clearImageUpload null-safe)
+  frontend/sw.js           (v2.42 → v2.43)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_redesign21_$(date +%F).tar.gz \
+     frontend/index.html frontend/js/app.js frontend/js/registro.js frontend/sw.js
+2) tar xzf /home/hepta/claude/retopa_redesign_stage21.tar.gz -C /
+3) cd /opt/retopa && docker compose down && docker compose up -d --build
+   (--build recompila Tailwind con el markup nuevo. NO se envía public/css/main.css;
+    lo regenera el build.)
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_redesign_stage21.js → 20/20  (390×844, Tailwind compilado:
+     · rpBicolorTitle: última palabra dorada, **marcadores**, escape XSS, 1 palabra
+     · H1 estático por defecto "¿Qué necesitás hoy?" y handler aplica config
+     · registro corto: 4 campos required, campos largos eliminados, hidden
+       auto-rellenables presentes, links legales reales, botón "Publicar…gratis"
+     · clearImageUpload null-safe, submit sin excepciones)
+  node harness_redesign_stage2.js  → 15/15  (regresión hero/chips/buscador/#1)
+  node harness_redesign_stage1.js  → 20/20  (regresión chrome/nav/legal/es-PY)
+
+  Correr harnesses:  cd /opt/retopa/frontend && \
+     npx --yes tailwindcss@3.4.0 -i ./css/tailwind-main.css -o ./public/css/main.css \
+        --config tailwind.config.js && \
+     node /opt/retopa/_deploy/harnesses/harness_redesign_stage21.js
+
+NOTAS site_config
+──────────────────────────────────────────────────
+  Para cambiar el título desde el panel: site_config.hero_title.
+  Ej: "¿Qué necesitás **hoy**?"  ·  "Tu directorio, tu **ciudad**"
+════════════════════════════════════════════════════════════════════════════

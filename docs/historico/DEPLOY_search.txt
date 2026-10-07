@@ -1,0 +1,74 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Fix "Top términos del mes" no guardaba las búsquedas (Semáforo)
+════════════════════════════════════════════════════════════════════════════
+
+LA CAUSA
+──────────────────────────────────────────────────
+El registro de búsquedas (INSERT en search_events) estaba DENTRO del bloque
+`if (!data)` del endpoint GET /api/v2/directory/businesses — es decir, solo se
+ejecutaba en CACHE-MISS. Como los resultados de búsqueda se cachean en Redis
+(120s, y misma búsqueda = misma clave para todos los usuarios), las búsquedas
+repetidas —que son la mayoría— se servían desde caché y NUNCA se registraban.
+Encima el error del INSERT se tragaba en silencio (.catch(()=>{})), así que si
+algo fallaba, nadie se enteraba.
+
+Resultado: "Top términos del mes" quedaba casi vacío aunque la gente buscara.
+
+LA SOLUCIÓN
+──────────────────────────────────────────────────
+Se movió el registro de la búsqueda FUERA del branch de caché: ahora corre
+SIEMPRE que haya término (primera página), tanto en cache-hit como cache-miss.
+Sigue siendo sin PII y fire-and-forget (no bloquea la respuesta), pero ahora
+si el INSERT falla lo LOGUEA (console.error [search_events]) en vez de tragarlo.
+No cambió nada de cómo se leen/renderizan los datos en el Semáforo.
+
+ARCHIVO MODIFICADO
+──────────────────────────────────────────────────
+  backend/src/routes/directory.js
+      · INSERT en search_events reubicado antes de `if (!data)` (registra en
+        cache-hit y cache-miss); catch con log de error.
+
+DEPLOY  (subís el .tar.gz a /home/hepta/claude/ · proyecto en /opt/retopa/)
+──────────────────────────────────────────────────
+1) Respaldo:
+      cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_search_$(date +%F).tar.gz \
+        backend/src/routes/directory.js
+2) Extraer:
+      tar xzf /home/hepta/claude/retopa_search_fix.tar.gz -C /
+3) Reconstruir:
+      cd /opt/retopa && docker compose up -d --build
+
+VERIFICAR QUE LA TABLA EXISTE (por las dudas)
+──────────────────────────────────────────────────
+El Semáforo ya lee de search_events, así que la tabla debería existir. Si al
+revisar ves que NO, corré la migración incluida:
+      cd /opt/retopa && docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+        < sql/2026-08-04_search_events.sql
+
+COMPROBAR EN VIVO (después de deployar)
+──────────────────────────────────────────────────
+1) Hacé 2–3 búsquedas iguales en el sitio (repetí el mismo término).
+2) Verificá que se registran (antes, la 2ª y 3ª no entraban):
+      cd /opt/retopa && docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+        -c "SELECT term, COUNT(*) FROM search_events WHERE created_at >= date_trunc('month', NOW()) GROUP BY term ORDER BY 2 DESC LIMIT 10;"
+3) En Admin → Semáforo, "Top términos del mes" debería mostrarlos.
+
+VERIFICACIÓN (harnesses incluidos)
+──────────────────────────────────────────────────
+  node harness_search_events.js → 13/13  (INSERT + lectura reales contra Postgres;
+    registra búsquedas repetidas, resuelve categoría por slug/nombre, normaliza el
+    término, filtra por mes; y —por estructura— que ya NO depende del caché).
+  node harness_search_route.js  →  7/7   (END-TO-END: monta el router REAL de
+    directory.js con Redis simulado + Postgres real y le pega por HTTP; comprueba
+    que /businesses?q=... REGISTRA en cache-hit, en cache-miss (aunque la query
+    principal falle) y en búsquedas repetidas, respetando las guardas).
+
+  Confirmado además que el buscador del sitio (search.js → loadBusinesses) pega a
+  la API /businesses del lado del cliente y que NO hay render SSR de resultados —
+  o sea, las búsquedas reales pasan por el endpoint que ahora sí registra.
+
+NOTA
+──────────────────────────────────────────────────
+Los términos buscados ANTES de este fix no se pueden recuperar (no se guardaron).
+El conteo válido arranca desde el deploy.
+════════════════════════════════════════════════════════════════════════════

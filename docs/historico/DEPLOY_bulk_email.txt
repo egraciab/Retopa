@@ -1,0 +1,62 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Envío EN LOTE de plantillas a un segmento de Usuarios (reactivación)
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ HACE
+──────────────────────────────────────────────────
+Cierra el pendiente #1 del backlog: mandar una plantilla (p.ej. 👋 reactivación)
+a TODO el segmento filtrado del panel Usuarios, de un clic — sin ir 1×1.
+
+En Usuarios, botón nuevo "📣 Enviar al segmento" (al lado de "Nuevo usuario"):
+  · Toma los MISMOS filtros que ya tenés aplicados arriba (rol, estado,
+    "sin acceso +N días", búsqueda). El modal te dice qué segmento es.
+  · Elegís la plantilla (por defecto 'reactivación'), un COOLDOWN (días) y un
+    TOPE por tanda.
+  · "Recalcular" simula sin enviar: cuántas se enviarían, cuántas del segmento,
+    y cuántas se SALTAN por cooldown, con una muestra.
+  · "Enviar al segmento" te confirma el número exacto y manda (rate-limit 3/s).
+
+COOLDOWN por destinatario+plantilla (anti-spam)
+──────────────────────────────────────────────────
+No re-manda LA MISMA plantilla al MISMO email dentro de N días (default 7),
+mirando email_log. Así podés relanzar la campaña sin machacar a los que ya
+recibieron. Cada plantilla tiene su propio cooldown (mandar 'tips' no bloquea
+'reactivación"). Todo queda logueado en Logs de correos.
+
+CÓMO SE USA (flujo típico de reactivación)
+──────────────────────────────────────────────────
+1) Usuarios → filtro "Sin acceso +30 días".
+2) "📣 Enviar al segmento" → plantilla 👋 reactivación → Recalcular.
+3) Revisás el número → Enviar. Si hay tope, repetís mañana para la próxima tanda.
+
+ARCHIVOS MODIFICADOS
+──────────────────────────────────────────────────
+  backend/src/routes/admin.js     (nuevo POST /admin/users/bulk-email, con
+                                   preview, cooldown por email_log y tope)
+  frontend/admin/js/users.js      (modal de lote: _bulkParams, openBulkEmailModal,
+                                   recalcBulk, sendBulk)
+  frontend/admin/index.html       (botón "Enviar al segmento" en la barra)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_bulk_$(date +%F).tar.gz \
+     backend/src/routes/admin.js frontend/admin/js/users.js frontend/admin/index.html
+2) tar xzf /home/hepta/claude/retopa_bulk_email.tar.gz -C /
+3) cd /opt/retopa && docker compose up -d --build
+   Sin migración de base (usa users, user_businesses, email_log ya existentes).
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_bulk_email_sql.js → 16/16  (Postgres real: mismo segmento que
+     /users, cooldown por email_log+plantilla, tope/would_send, orden, owned_name)
+  node harness_bulk_email_ui.js  → 19/19  (navegador real: el modal lee los
+     filtros y manda preview + envío real con el payload correcto)
+  (regresión OK: users_lastseen 16/16 · users_ui 17/17 · users_filter_ui 13/13 ·
+   users_inactive 15/15 · engagement_templates 31/31)
+
+NOTAS
+──────────────────────────────────────────────────
+· El envío es sincrónico con rate-limit 3/s: una tanda de 500 tarda ~3 min.
+  Por eso el TOPE por tanda — mandá de a lotes y no cierres la ventana.
+· Para volumen alto, mirá el informe SPF/DKIM que te pasé (mejora inbox).
+════════════════════════════════════════════════════════════════════════════

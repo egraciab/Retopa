@@ -1,0 +1,43 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Logros: la explicación "¿Qué significa cada logro?" sigue al umbral
+· patch sobre el feature de Logros. Solo 2 archivos frontend. Sin base, sin SW.
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ PASABA
+──────────────────────────────────────────────────
+El nombre, ícono, color y pista editados en el Admin YA se reflejaban en la
+explicación (usa la misma lista configurada). Lo que NO seguía era el NÚMERO del
+umbral dentro del texto: la pista era texto fijo ("Sumá 10 me gusta"), así que si
+cambiabas el umbral a 20, el texto seguía diciendo 10.
+
+FIX — placeholders en la pista
+──────────────────────────────────────────────────
+La pista ahora admite {umbral} y {min_reviews}, que se reemplazan por el valor
+vigente al renderizar. Los defaults ya vienen con placeholder, p. ej.:
+  · Querido        → "Sumá {umbral} “me gusta”"        (10 → "Sumá 10…")
+  · En movimiento  → "{umbral}+ visitas en 30 días"
+  · Ficha completa → "Completá tu ficha al {umbral}%"
+  · Bien valorado  → "Promedio {umbral}+ con {min_reviews} o más reseñas"
+Así, al cambiar un umbral en el Admin, tanto el logro como su explicación quedan
+en sync. Igual podés escribir la pista libre; si dejás {umbral}, se auto-completa.
+En el editor se agregó una nota aclarando los placeholders disponibles.
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  frontend/cliente/js/dashboard.js   (achFillHint + defaults con placeholder)
+  frontend/admin/js/achievements.js  (defaults con placeholder + nota en el editor)
+
+DEPLOY (frontend; sin base, sin SW)
+──────────────────────────────────────────────────
+  tar xzf /home/hepta/claude/retopa_logros_hint_sync.tar.gz -C /
+  cd /opt/retopa && docker compose up -d --build
+
+  Prueba: Admin → Logros: cambiá el umbral de "Querido" a 20 y Guardá. En /cliente,
+  la explicación debe decir "Sumá 20 …".
+
+VERIFICACIÓN (harness en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_logros_cliente.js  → 20/20  (incluye: la explicación sustituye
+     {umbral}/{min_reviews}, sigue el umbral al cambiarlo, respeta pista y label
+     custom, y no deja placeholders sin reemplazar)
+════════════════════════════════════════════════════════════════════════════

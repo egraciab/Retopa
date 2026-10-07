@@ -1,0 +1,79 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — ACTIVACIÓN DE CUENTA en el alta de ficha (el correo de verificación
+que faltaba en el embudo real)  ·  solo código (sin migration)
+════════════════════════════════════════════════════════════════════════════
+
+EL PROBLEMA QUE RESUELVE
+──────────────────────────────────────────────────
+El correo de verificación solo se disparaba al crear una CUENTA (/auth/register).
+Pero el alta de ficha (formulario corto SIN login) va por /leads y NO crea cuenta,
+así que nunca se disparaba. Por eso te llegó "bienvenida/ficha" pero no el de
+verificación. Esto lo cierra en el lugar correcto del embudo.
+
+CÓMO QUEDA EL FLUJO
+──────────────────────────────────────────────────
+1) El dueño publica su ficha (form corto, sin login). Además de crear la ficha,
+   PROVISIONAMOS una cuenta pendiente para su correo y le mandamos UN correo:
+   "Tu negocio ya está publicado — confirmá tu correo creando tu contraseña"
+   (botón → https://retopa.com.py/?activar=TOKEN). Ese reemplaza al 'welcome'.
+2) Hace clic → pantalla "Creá tu contraseña" → al enviar:
+   confirma el correo (email_verified=TRUE) + define su contraseña + se enganchan
+   sus fichas + queda logueado y va a /cliente.
+3) Después entra siempre con correo + contraseña (la que creó en el paso 2).
+
+Reglas de seguridad (verificadas):
+  · Antes de activar, la cuenta tiene una contraseña placeholder NO usable → no se
+    puede loguear hasta activar.
+  · Si el correo YA tenía cuenta verificada, la ficha se engancha en el acto (sin
+    pedir activación) y se manda el 'welcome' normal.
+  · Si ya existía cuenta sin verificar, se reusa (no se duplica) y se reenvía el link.
+
+DECISIÓN aplicada: "crear contraseña al confirmar" (reusa la pantalla de reset).
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  backend/src/config/mail.js              ← nuevo template 'activateAccount'
+  backend/src/helpers/fichaActivation.js  ← NUEVO: provisión de cuenta + activación
+  backend/src/routes/directory.js         ← /leads llama la provisión (solo sin sesión);
+                                            el 'welcome' se manda solo si NO hubo activación
+  backend/src/routes/auth-public.js       ← POST /auth/activate-account (token+password)
+  frontend/index.html                     ← ids en la pantalla de contraseña (reset)
+  frontend/js/auth.js                     ← ?activar=TOKEN → "creá tu contraseña" → activar
+  frontend/sw.js                          ← v2.45 → v2.46
+
+PRERREQUISITO (ya deployado)
+──────────────────────────────────────────────────
+  Usa las columnas users.verify_token / verify_token_expires que agregó el
+  migration del paquete anterior (retopa_email_verification). Ya lo corriste, así
+  que ESTE paquete NO trae migration: es solo código.
+
+DEPLOY (solo rebuild — sin SQL)
+──────────────────────────────────────────────────
+1) Backup:
+     cd /opt/retopa
+     tar czf /home/hepta/claude/backup_pre_activation_$(date +%F).tar.gz \
+        backend/src/config/mail.js backend/src/routes/directory.js \
+        backend/src/routes/auth-public.js frontend/index.html frontend/js/auth.js frontend/sw.js
+2) Desempaquetar:
+     tar xzf /home/hepta/claude/retopa_ficha_activation.tar.gz -C /
+3) Levantar:
+     cd /opt/retopa && docker compose down && docker compose up -d --build
+
+PRUEBA DE HUMO
+──────────────────────────────────────────────────
+  · Publicá una ficha con un correo tuyo (form corto, sin login).
+  · Te debe llegar "Tu negocio ya está publicado — confirmá tu correo...".
+  · Clic → pantalla "Creá tu contraseña" → poné una → entrás a /cliente con la
+    ficha ya asignada. Cerrá sesión y logueate con ese correo + esa contraseña.
+  · (SMTP debe estar configurado — el mismo que manda los otros correos.)
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/, Postgres real)
+──────────────────────────────────────────────────
+  node _deploy/harnesses/harness_ficha_activation.js  → 23/23
+     (provisión: crea cuenta pendiente + correo activateAccount; reusa; engancha
+      en el acto si ya verificada; no se puede loguear antes de activar;
+      activate-account crea contraseña + confirma + engancha 2 fichas; token
+      corto/inválido/reusado → 400; login funciona tras activar.)
+  node _deploy/harnesses/harness_email_verification.js → 21/21  (regresión)
+  Requiere postgresql-16 local (solo test).
+════════════════════════════════════════════════════════════════════════════

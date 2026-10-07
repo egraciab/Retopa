@@ -1,0 +1,73 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Logros configurables desde el Admin
+· backend (2 allowlists) + Admin (editor nuevo) + Cliente (lectura de config)
+· Sin migración. Sin bump de SW (/admin y /cliente están fuera del SW).
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ ENTRA
+──────────────────────────────────────────────────
+Los 7 logros del dashboard del dueño (Ficha completa, Verificado, Bien valorado,
+Con reseñas, Querido, En movimiento, Impulso activo) pasan de hardcodeados a
+CONFIGURABLES desde Admin → Configuración → "Logros".
+
+Por cada logro se puede editar: on/off, nombre, pista (descripción), ícono
+(Font Awesome), color, umbral(es) y orden. La MÉTRICA de cada logro es FIJA
+(cómo se gana) — no se inventan métricas nuevas, así no hay riesgo de reglas rotas.
+
+CERO REGRESIÓN: si no hay config guardada (o es inválida), se usan exactamente
+los 7 valores actuales. Si el Admin apaga todos, el panel no se muestra.
+
+CÓMO FUNCIONA (sin tabla nueva)
+──────────────────────────────────────────────────
+· Se guarda como JSON en site_config.achievements_config (key/value existente).
+· Admin: usa el PUT /site-config que ya existe (upsert genérico). Se agregó la key
+  al allowlist del PUT (admin.js). El PUT ya invalida la caché pública.
+· Cliente: el dashboard ya fetchea GET /site-config (público). Se agregó la key al
+  whitelist de ese endpoint (directory.js). renderAchievements lee la config,
+  hace merge sobre los DEFAULTS por id (métrica fija) y calcula "logrado".
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  backend/src/routes/admin.js        (allowlist PUT /site-config: +achievements_config)
+  backend/src/routes/directory.js    (whitelist GET público /site-config: +achievements_config)
+  frontend/admin/index.html          (menú "Logros" + sección + <script>)
+  frontend/admin/js/config.js        (showSection: grupo/título/init)
+  frontend/admin/js/achievements.js  (NUEVO — editor)
+  frontend/cliente/js/dashboard.js   (renderAchievements lee config, merge + defaults)
+  frontend/cliente/js/app.js         (guarda /site-config en window._retopaSiteConfig)
+
+  ⚠ ACH_DEFAULTS y achMergeConfig() están DUPLICADOS (idénticos) en
+    admin/js/achievements.js y cliente/js/dashboard.js — son la fuente de verdad
+    compartida de ids/métricas/defaults. Si tocás uno, tocá el otro.
+
+DEPLOY (backend + frontend; sin base, sin SW)
+──────────────────────────────────────────────────
+1) Backup:
+     cd /opt/retopa
+     tar czf /home/hepta/claude/backup_pre_logros_$(date +%F).tar.gz \
+        backend/src/routes/admin.js backend/src/routes/directory.js \
+        frontend/admin/index.html frontend/admin/js/config.js \
+        frontend/cliente/js/dashboard.js frontend/cliente/js/app.js
+2) Desempaquetar:
+     tar xzf /home/hepta/claude/retopa_logros.tar.gz -C /
+3) Rebuild (backend + frontend):
+     cd /opt/retopa && docker compose up -d --build
+4) Prueba:
+   · Admin → Configuración → Logros: editá un umbral o apagá un logro y Guardá.
+   · Entrá al panel del dueño de una ficha (/cliente): el bloque "Logros" debe
+     reflejar el cambio. (Nada que hacer con la base ni con el SW.)
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_logros_backend.js  → 11/11 (Postgres real: allowlist del PUT y
+     whitelist del GET público extraídos del FUENTE incluyen achievements_config;
+     round-trip upsert real; el SELECT público devuelve la config y filtra las
+     keys no whitelisteadas como smtp_pass)
+  node harness_logros_cliente.js  → 14/14 (dashboard.js real: defaults, on/off,
+     umbral que se cumple/no, orden con config completa, config inválida → defaults,
+     round-trip con payload estilo Admin, apagar todos → panel oculto)
+  node harness_logros_admin.js    → 14/14 (achievements.js real: render de 7 filas,
+     carga de config, métrica booleana sin umbral, Bien valorado con 2 umbrales,
+     guardar → PUT /site-config con JSON correcto y sin umbral en booleanas,
+     orden contiguo 0..6, restablecer)
+════════════════════════════════════════════════════════════════════════════

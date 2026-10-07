@@ -1,0 +1,55 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Rediseño mobile (opción A) · ETAPA 2/4: Home hero mobile-first
+(delta sobre la Etapa 1 ya deployada)
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ ENTRA (calcado de la maqueta "A · Inicio")
+──────────────────────────────────────────────────
+1) Hero compacto sobre navy #1B3A6B:
+   · Contador (#heroStats) · H1 real "¿Qué necesitás HOY?" (hoy en dorado).
+   · Buscador ARRIBA DEL PLIEGUE (visible sin scroll a 390×844 — verificado).
+   · Fila "Cerca de mí" (lo estiliza distance.js) + "Buscar" (botón dorado).
+   · El H1 ya no es configurable por site_config (diseño aprobado fijo); el
+     navy del hero se fuerza con .rp-hero{!important} para que ningún override
+     lo cambie.
+2) "Buscá por rubro": 6 chips (Cerrajería, Taller mecánico, Veterinaria,
+   Farmacia, Plomería, Electricista). Cada chip llena el buscador y busca.
+3) Bloque dorado "¿Tenés un negocio?" con "Registrar mi negocio gratis" +
+   "Ver planes". Se ELIMINÓ la vieja sección CTA "¿Tenés un negocio en
+   Paraguay?" (estaba duplicada — ahora la propuesta vive en un solo bloque).
+4) Placeholder de "Abiertos ahora, cerca tuyo" (oculto) — se completa en la
+   etapa 3 con el mismo componente de tarjeta que los Resultados.
+
+Funcionalidad preservada: #mainSearch, #searchSuggestions, #citySelect/
+#categorySelect (hidden), comboboxes ciudad/categoría (solo desktop), #nearMeBtn,
+#nearMeClear, #locationPill, #popularTags, #activeFilters. performSearch()
+intacto (Enter en el buscador o botón "Buscar"). server.js NO se tocó.
+
+ARCHIVOS MODIFICADOS (delta de la etapa 1)
+──────────────────────────────────────────────────
+  frontend/index.html   (hero reemplazado + chips + bloque dorado + .rp-hero +
+                         rpRubro; CTA duplicada eliminada)
+  frontend/sw.js        (v2.41 → v2.42)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_redesign2_$(date +%F).tar.gz \
+     frontend/index.html frontend/sw.js
+2) tar xzf /home/hepta/claude/retopa_redesign_stage2.tar.gz -C /
+3) cd /opt/retopa && docker compose down && docker compose up -d --build
+   (--build recompila Tailwind con el markup nuevo.)
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_redesign_stage2.js → 15/15  (390×844, Tailwind compilado:
+     H1="¿Qué necesitás hoy?", CRITERIO #1 buscador visible sin scroll
+     (bottom≈230), hero navy, botón Buscar dorado, 6 chips que disparan la
+     búsqueda, combos ocultos en mobile, bloque dorado, ids funcionales intactos)
+  node harness_redesign_stage1.js → 20/20  (regresión del chrome/nav/legal/es-PY)
+
+CRITERIOS DE ACEPTACIÓN cubiertos ahora
+──────────────────────────────────────────────────
+  #1 buscador sin scroll ✓ · (#3 barra inferior, #5 legal, #6 números — de la
+  etapa 1). Pendiente: etapa 3 (Resultados #2/#4 + "Abiertos ahora") y etapa 4
+  (Ficha #5-acciones fijas).
+════════════════════════════════════════════════════════════════════════════

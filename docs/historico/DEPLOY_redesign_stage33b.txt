@@ -1,0 +1,53 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Rediseño mobile (opción A) · ETAPA 3 (parte 3b, CIERRE de la E3)
+Filtros chip sticky + "Ver más resultados" + bloque "¿No encontrás?" · solo frontend
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ ENTRA
+──────────────────────────────────────────────────
+1) FILTROS CHIP STICKY (mobile): la tarjeta de filtros lateral queda OCULTA en
+   mobile (sigue en desktop) y arriba de los resultados aparece una fila de chips
+   pegada al hacer scroll (top 60px):
+     · "Cerca de mí" (activa geolocalización; se apaga tocando de nuevo)
+     · "Verificados" (togglea el filtro real)
+     · "4+" (rating ≥ 4)
+     · Orden (Relevancia / Mejor valorados / Recientes)
+   Los chips muestran su estado (activo en navy) y recargan leyendo los controles
+   reales (no pisan la ciudad).
+2) "VER MÁS RESULTADOS": reemplaza la paginación numerada. Suma resultados de a
+   10 y desaparece cuando no hay más. (La paginación numerada quedó oculta.)
+3) BLOQUE "¿NO ENCONTRÁS LO QUE BUSCÁS?" al final de los resultados, con CTA
+   "Registrar mi negocio" (gratis) y "Escribinos" (soporte por WhatsApp).
+
+Preservado: performSearch, filtros del backend (verified/minRating/sort/ciudad),
+"Cerca de mí" del hero, el toggle lista/tarjetas en desktop.
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  frontend/index.html   (aside hidden lg:block; barra #rpFilterBar sticky; #loadMoreWrap;
+                         bloque "¿No encontrás?"; CSS .rp-fchip/.rp-loadmore)
+  frontend/js/filters.js(rpToggleFilter / rpMobileSort / rpSetFilterChipsState / rpReloadResults)
+  frontend/js/search.js (loadBusinesses: "Ver más" en vez de paginación numerada + sync chips)
+  frontend/sw.js        (v2.49 → v2.50)
+
+DEPLOY (solo frontend)
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_e33b_$(date +%F).tar.gz \
+     frontend/index.html frontend/js/filters.js frontend/js/search.js frontend/sw.js
+2) tar xzf /home/hepta/claude/retopa_redesign_stage33b.tar.gz -C /
+3) cd /opt/retopa && docker compose down && docker compose up -d --build
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_redesign_stage33b.js → 16/16  (aside oculto, barra sticky con chips,
+     paginación numerada oculta; "Ver más" aparece/agrega/oculta; chips Verificados/4+
+     toggean el filtro real y mandan verified=true / minRating=4; orden mobile sincroniza
+     sort=recent; bloque "¿No encontrás?" con Registrar + Escribinos)
+  node harness_redesign_stage33a.js → 9/9   (categorías — regresión)
+  node harness_redesign_stage3.js   → 15/15 (tarjeta compacta — regresión)
+  (stage1/2/2.1/2.2/3.2 siguen 20/15/22/20/14)
+
+Con esto CIERRA la Etapa 3. Próximo: Etapa 4 — la Ficha (acciones fijas abajo,
+rating sin "0.0", padding para la barra inferior, y espejar el markup en el SSR
+de server.js manteniendo el H1 = nombre del negocio).
+════════════════════════════════════════════════════════════════════════════

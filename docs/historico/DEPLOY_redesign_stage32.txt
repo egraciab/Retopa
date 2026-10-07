@@ -1,0 +1,53 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Rediseño mobile (opción A) · ETAPA 3 (parte 2): HOME
+"Abiertos ahora" + orden (Abiertos → Promos → Negocio) + promos a estilo mobile
+· solo frontend
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ ENTRA
+──────────────────────────────────────────────────
+1) "Abiertos ahora, cerca tuyo" (sección que estaba de placeholder):
+   · Trae verificados/destacados (con coords si hay ubicación), filtra los que
+     están ABIERTOS ahora (según hours_json, hora de Asunción) y muestra hasta 6
+     con la MISMA tarjeta compacta de resultados.
+   · Si no hay ninguno abierto, la sección no aparece (queda oculta).
+2) Orden del home mobile (acordado): Hero + chips → **Abiertos ahora** →
+   **Promociones** → **¿Tenés un negocio?** → directorio.
+   (Se movió el bloque de Promos para que quede ARRIBA del bloque dorado.)
+3) Promos del home ALINEADAS a mobile (tu recordatorio): las promos boost "Home"
+   siguen cargando y mostrándose igual que antes, pero a ≤1023px se ven con el
+   estilo nuevo (fondo blanco, header compacto y alineado a la izquierda, sin el
+   subtítulo). En desktop quedan EXACTAMENTE como estaban (no se tocó el carrusel
+   ni el layout desktop).
+
+Nota: el mecanismo de promos del home ya funcionaba (loadHomePromos + auto-show);
+esto NO cambia qué promos entran, solo su lugar y su estilo en mobile.
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  frontend/index.html   (reorden Abiertos→Promos→Negocio; clases rp-homepromos/
+                         rp-hp-head/rp-hp-pill/rp-hp-sub + CSS mobile de promos)
+  frontend/js/search.js (rpIsOpenNow() + loadAbiertosAhora())
+  frontend/js/app.js    (init llama loadAbiertosAhora)
+  frontend/sw.js        (v2.47 → v2.48)
+
+DEPLOY (solo frontend)
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_e32_$(date +%F).tar.gz \
+     frontend/index.html frontend/js/search.js frontend/js/app.js frontend/sw.js
+2) tar xzf /home/hepta/claude/retopa_redesign_stage32.tar.gz -C /
+3) cd /opt/retopa && docker compose down && docker compose up -d --build
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_redesign_stage32.js → 14/14  (orden Abiertos→Promos→Negocio;
+     rpIsOpenNow abierto/cerrado/sin-horario; loadAbiertosAhora lista solo los
+     abiertos (3 de 5) y oculta la sección si no hay; promos con fondo blanco y
+     subtítulo oculto a 390px)
+  node harness_redesign_stage3.js  → 15/15  (tarjeta compacta — regresión)
+  (stage1/2/2.1/2.2 siguen 20/15/22/20)
+
+PENDIENTE Etapa 3 (parte 3):
+  · Acceso a TODAS las categorías (además de los 6 rubros) — tu pedido.
+  · Chips de filtro sticky + "Ver más resultados" + bloque "¿No encontrás?".
+════════════════════════════════════════════════════════════════════════════

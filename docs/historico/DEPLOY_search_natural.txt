@@ -1,0 +1,69 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Búsqueda humanizada: "ferretería en luque" separa rubro + ciudad
+════════════════════════════════════════════════════════════════════════════
+
+EL PROBLEMA
+──────────────────────────────────────────────────
+Cuando el usuario escribía rubro y ciudad JUNTOS en el buscador
+("ferretería en luque"), el motor exigía que TODO ese texto matcheara el nombre
+de una ficha. Resultado real (medido): traía ferreterías de CUALQUIER ciudad
+—incluida Asunción— ignorando "luque", y el conector "en" ensuciaba el match.
+Nunca separaba el rubro de la ciudad.
+
+EL FIX
+──────────────────────────────────────────────────
+El backend ahora PARSEA la consulta libre antes de buscar:
+  · Detecta una CIUDAD conocida dentro del texto (tabla `cities`, soporta
+    nombres de varias palabras: "Ciudad del Este", "San Lorenzo").
+  · Quita conectores sueltos ("en", "de", "del", "cerca", "zona", "barrio"…).
+  · Deja el RUBRO como término de búsqueda (conservando tildes/mayúsculas).
+Ejemplos:
+  "ferretería en luque"        → rubro "ferretería" + ciudad "Luque"
+  "farmacia en ciudad del este"→ rubro "farmacia"  + ciudad "Ciudad del Este"
+  "cerca de san lorenzo"       → ciudad "San Lorenzo" (lista toda la ciudad)
+  "luque"                      → lista todo Luque
+  "ferretería" (sin ciudad)    → igual que antes
+
+Además:
+  · Es accent-insensible en el rubro: "ferreteria" (sin tilde) encuentra
+    "Ferretería" (vía el índice full-text con unaccent que ya existía).
+  · Solo autoextrae la ciudad si el usuario NO eligió una en el filtro
+    (los filtros del panel siguen mandando).
+  · El semáforo de demanda ahora registra el término YA parseado + la ciudad
+    detectada → datos más limpios de "qué rubro se busca en qué ciudad".
+  · Bonus: se corrigió una fragilidad del ORDER BY por relevancia (reusaba un
+    índice de parámetro calculado a mano; ahora usa un parámetro dedicado).
+
+Sirve para el buscador del sitio, los spots publicitarios y cualquier link que
+apunte a /businesses?q=...  (el parseo es server-side, no depende del front).
+
+ARCHIVOS MODIFICADOS
+──────────────────────────────────────────────────
+  backend/src/routes/directory.js   (parseSearchQuery + getCityIndex + uso de
+                                     qEff/cityEff en GET /businesses)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_searchnat_$(date +%F).tar.gz \
+     backend/src/routes/directory.js
+2) tar xzf /home/hepta/claude/retopa_search_natural.tar.gz -C /
+3) cd /opt/retopa && docker compose up -d --build
+   Sin migración de base. Usa la tabla `cities` y las extensiones unaccent/
+   pg_trgm que ya estaban en uso.
+
+VERIFICACIÓN (harness en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_search_natural.js → 17/17  (Postgres real: parser con conector,
+     sin conector, ciudad multi-palabra, solo-ciudad, sin-ciudad; y el WHERE
+     efectivo: "ferretería en luque" → SOLO la de Luque; "ferreteria" sin tilde
+     encuentra ambas; demuestra que el viejo colaba la de Asunción)
+  (regresión OK: search_route 7/7 · search_events 13/13)
+
+PARKED / próximos niveles (opcionales)
+──────────────────────────────────────────────────
+  · Diccionario de SINÓNIMOS de rubro (botica→farmacia, taller→mecánico,
+    heladería→helado, etc.) para captar cómo habla la gente.
+  · Tolerancia a typos un poco más agresiva (bajar el umbral de similarity solo
+    cuando 0 resultados) y sugerencia "¿quisiste decir…?".
+  · Detección de barrios (no solo ciudades) si cargás esa data.
+════════════════════════════════════════════════════════════════════════════

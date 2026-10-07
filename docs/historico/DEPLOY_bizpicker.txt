@@ -1,0 +1,49 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Plantillas: buscador de fichas para enviar correos
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ PASABA
+──────────────────────────────────────────────────
+En Plantillas → "Enviar de verdad", el selector de fichas se llenaba con
+/businesses?limit=200&verified=true → SOLO fichas verificadas y máximo 200 (de
+~14.000). Por eso "no cargaba todas las fichas". Y un <select> con miles de
+opciones sería inusable igual.
+
+LA SOLUCIÓN
+──────────────────────────────────────────────────
+Se reemplazó el <select> por un BUSCADOR con autocompletado:
+  · Escribís nombre / RUC / email / teléfono → consulta el backend
+    (/admin/businesses?q=…&limit=15) sobre TODAS las fichas (verificadas o no).
+  · Al elegir una ficha, se autocompleta el email del destinatario con el de la
+    ficha (y si no tiene email, no pisa lo que ya escribiste).
+  · El resto del flujo (Enviar prueba / Enviar de verdad) queda igual.
+No hizo falta tocar el backend: el endpoint /admin/businesses ya soporta ?q=.
+
+Con esto se destraba también lo de mandar mails "marketeros" (Bienvenida, tips,
+etc.): ya podés buscar a cualquier cliente/prospecto y enviarle la plantilla.
+Las plantillas de bienvenida/engagement ya existen en el panel; si querés una
+nueva específica de "consejos para aprovechar tu ficha", te la agrego aparte.
+
+ARCHIVOS MODIFICADOS (solo frontend)
+──────────────────────────────────────────────────
+  frontend/admin/index.html          (input de búsqueda en vez del <select>)
+  frontend/admin/js/templates.js     (bizPickerSearch / bizPickerPick)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_bizpicker_$(date +%F).tar.gz \
+     frontend/admin/index.html frontend/admin/js/templates.js
+2) tar xzf /home/hepta/claude/retopa_bizpicker.tar.gz -C /
+3) cd /opt/retopa && docker compose up -d --build
+   Sin migración de base.
+
+VERIFICACIÓN (harness incluido)
+──────────────────────────────────────────────────
+  node harness_biz_picker.js → 14/14  (navegador real): busca sobre todas las
+    fichas (sin verified=true ni limit=200), lista verificadas y no verificadas,
+    y al elegir autocompleta slug + email sin pisar un email ya escrito.
+
+NOTA sobre tu duda de "Reenviar activación": NUNCA resetea la contraseña de un
+usuario existente (solo escribe reset_token, jamás password_hash), y para cuentas
+ya existentes ni siquiera manda un link de activación. Podés reenviarlo sin riesgo.
+════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,54 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — FIX: distancias en "Abiertos ahora" al conceder la ubicación
+· solo frontend (JS)
+════════════════════════════════════════════════════════════════════════════
+
+EL PROBLEMA
+──────────────────────────────────────────────────
+En la PRIMERA visita, aunque el usuario concede la ubicación, "Abiertos ahora"
+(y las tarjetas) muestran solo la ciudad, sin distancia. Recién aparece la
+distancia al REFRESCAR la página.
+
+CAUSA
+──────────────────────────────────────────────────
+La ubicación se guarda en sessionStorage, pero TODOS los callbacks de ubicación
+(conceder/actualizar/limpiar, botón y chip "Cerca de mí") recargaban SOLO los
+resultados (loadBusinesses) y NUNCA "Abiertos ahora" (loadAbiertosAhora). Como
+esa sección se dibujó al cargar SIN coords, quedaba sin distancias hasta que un
+refresh volvía a leer la ubicación ya cacheada.
+
+EL FIX
+──────────────────────────────────────────────────
+  · Nuevo rpReloadLocationDependent() (search.js): recarga resultados + "Abiertos
+    ahora" juntos.
+  · distance.js: todos los reloads por ubicación pasan por _reloadForLocation(),
+    que delega en rpReloadLocationDependent (refresh en segundo plano, "Actualizar",
+    "Quitar", botón y pill "Cerca de mí").
+  · app.js: el callback de initNearMeButton usa el reload combinado.
+  · filters.js: el chip "Cerca de mí" de resultados también refresca "Abiertos ahora".
+Resultado: apenas se concede/actualiza la ubicación, "Abiertos ahora" se vuelve a
+pedir con lat/lng y aparecen las distancias — sin refrescar la página.
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  frontend/js/search.js  (rpReloadLocationDependent)
+  frontend/js/distance.js(_reloadForLocation en todos los reloads por ubicación)
+  frontend/js/filters.js (chip "Cerca de mí" refresca Abiertos ahora)
+  frontend/js/app.js     (initNearMeButton usa el reload combinado)
+  frontend/sw.js         (v2.51 → v2.52)
+
+DEPLOY (solo frontend)
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_locfix_$(date +%F).tar.gz \
+     frontend/js/search.js frontend/js/distance.js frontend/js/filters.js frontend/js/app.js frontend/sw.js
+2) tar xzf /home/hepta/claude/retopa_fix_location_reload.tar.gz -C /
+3) cd /opt/retopa && docker compose down && docker compose up -d --build
+
+VERIFICACIÓN (harness en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_fix_location_reload.js → 7/7  (rpReloadLocationDependent recarga
+     ambos; _reloadForLocation delega sin recursión; sin ubicación la consulta de
+     "Abiertos ahora" no manda lat/lng y no hay distancia; con ubicación manda
+     lat/lng y aparece la distancia en km)
+  (regresiones de todas las etapas del rediseño siguen verdes)
+════════════════════════════════════════════════════════════════════════════

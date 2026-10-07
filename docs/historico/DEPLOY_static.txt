@@ -1,0 +1,62 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Fix: exposición de código fuente/estructura del frontend
+(corresponde al hallazgo de Kristen: "descargar la estructura de la web")
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ PASABA
+──────────────────────────────────────────────────
+El server del frontend hacía express.static(__dirname) sobre TODA la carpeta
+frontend/, así que eran descargables públicamente:
+    https://retopa.com.py/server.js        (código del server SSR)
+    https://retopa.com.py/package.json      (dependencias y versiones)
+    https://retopa.com.py/Dockerfile
+    https://retopa.com.py/tailwind.config.js
+    https://retopa.com.py/node_modules/...  (según el build)
+No hay secretos en esos archivos (las credenciales viven en el backend / .env,
+que NO se sirve), pero revelan cómo está construida la app y las versiones de
+librerías → material de reconocimiento para un atacante. Coincide con lo que
+describe Kristen.
+
+NO había directory listing (nginx sin autoindex, index:false), así que no podía
+"listar" carpetas; sí bajar archivos conocidos.
+
+LA SOLUCIÓN
+──────────────────────────────────────────────────
+Un guard ANTES del static bloquea (404) el código fuente y config: /server.js,
+/package.json, /package-lock.json, /Dockerfile, /tailwind.config.js, /.env,
+/node_modules/*, /.git/*, y cualquier *.map. Además express.static con
+dotfiles:'ignore' (no sirve ocultos, sin romper /.well-known de ACME).
+Los .js/.css del cliente (/js, /admin/js, ...) se siguen sirviendo normal.
+
+ARCHIVO MODIFICADO
+──────────────────────────────────────────────────
+  frontend/server.js   (guard de rutas sensibles + dotfiles:ignore)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_static_$(date +%F).tar.gz frontend/server.js
+2) tar xzf /home/hepta/claude/retopa_static_fix.tar.gz -C /
+3) cd /opt/retopa && docker compose up -d --build
+   Sin migración de base.
+
+VERIFICAR (después de deployar)
+──────────────────────────────────────────────────
+   curl -sI https://retopa.com.py/server.js      | head -1   # → 404
+   curl -sI https://retopa.com.py/package.json    | head -1   # → 404
+   curl -sI https://retopa.com.py/js/app.js       | head -1   # → 200 (sigue OK)
+
+VERIFICACIÓN (harness incluido)
+──────────────────────────────────────────────────
+  node harness_static_exposure.js → 14/14  (bloquea fuente/config/node_modules/
+    .map/.git; sirve los .js del cliente; no rompe /.well-known)
+
+════════════════════════════════════════════════════════════════════════════
+APARTE — clave de Google Maps (NO es un fix de código)
+──────────────────────────────────────────────────
+En frontend/admin/index.html hay una API key de Google Maps embebida (es
+inevitable: se usa en el navegador). ASEGURATE de que esté RESTRINGIDA en Google
+Cloud Console → Credentials → esa key:
+  · Application restrictions: HTTP referrers → https://retopa.com.py/*
+  · API restrictions: solo Maps JavaScript API (+ Places/Geocoding que uses)
+Si está sin restringir, cualquiera puede usarla y generarte facturación.
+════════════════════════════════════════════════════════════════════════════

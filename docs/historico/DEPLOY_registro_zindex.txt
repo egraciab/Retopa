@@ -1,0 +1,47 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — FIX: el formulario de "Registrar mi negocio" quedaba DETRÁS de la ficha
+· cambio SOLO en frontend/index.html. Sin backend, sin migración, SIN tocar sw.js.
+════════════════════════════════════════════════════════════════════════════
+
+SÍNTOMA
+──────────────────────────────────────────────────
+El banner de registro aparece bien, pero al tocar "Registrar mi negocio gratis"
+con una FICHA abierta, el formulario se abría POR DETRÁS de la ficha (no usable).
+
+CAUSA (mismo patrón que el fix del modal de "Reclamar empresa")
+──────────────────────────────────────────────────
+Problema de z-index:
+  · #profileModal (la ficha)            → z-index 85
+  · .rp-ficha-actions (barra fija, E4)  → z-index 86
+  · #registroModal (registro)           → z-[70]   ← QUEDABA ABAJO
+Como 70 < 85 y 70 < 86, el formulario se dibujaba detrás de la ficha.
+(El z-index:9999 que hay en registro.js es el dropdown del combo, NO el modal.)
+
+FIX (frontend/index.html, 1 línea)
+──────────────────────────────────────────────────
+  #registroModal: z-[70]  →  z-index:10000 (inline), por encima de la ficha (85),
+  de la barra (86) y de las hojas del perfil (9990/9991). Mismo criterio que el
+  modal de reclamo. No se toca nada de banners, registro, auth ni search.js.
+
+NOTA sobre el SW: no se modifica sw.js (para no colisionar con el trabajo de la
+otra sesión en search.js). El index.html se sirve NETWORK-FIRST, así que el fix
+llega en la próxima carga online sin bump de versión.
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  frontend/index.html   (MODIFICADO — z-index de #registroModal)
+
+DEPLOY (frontend; con rebuild)
+──────────────────────────────────────────────────
+1) Backup:  cp /opt/retopa/frontend/index.html /home/hepta/claude/index.html.bak_$(date +%F)
+2) tar xzf /home/hepta/claude/retopa_registro_zindex.tar.gz -C /
+3) cd /opt/retopa && docker compose up -d --build
+4) Prueba: abrí una ficha, esperá/forzá el banner de registro y tocá
+   "Registrar mi negocio gratis" → el formulario debe aparecer ARRIBA, centrado.
+
+VERIFICACIÓN (harness en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_registro_zindex.js /opt/retopa/frontend  → 6/6
+   (index.html ya no en z-[70] y con z-index>86; en vivo: con la ficha abierta,
+    al abrir el registro queda por encima al centro y tapa la barra de acciones)
+════════════════════════════════════════════════════════════════════════════

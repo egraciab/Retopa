@@ -1,0 +1,88 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — VERIFICACIÓN DE CORREO (link mágico) + enganche gateado por confirmación
+Pre-Etapa 3 · complementa/mejora el "enganche por correo"
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ HACE
+──────────────────────────────────────────────────
+Cierra el hueco de seguridad del enganche: una cuenta sin verificar ya NO puede
+reclamar fichas por correo. El flujo ahora es:
+
+  1) El usuario se registra (cuenta) → se le envía un correo con un LINK MÁGICO:
+        https://retopa.com.py/?verify=TOKEN
+     (No se engancha nada todavía. email_verified=false.)
+  2) Hace clic → la SPA detecta ?verify=TOKEN, confirma contra POST /verify-email,
+     marca email_verified=TRUE y RECIÉN AHÍ engancha las fichas con ese correo.
+     Queda logueado y, si tiene fichas, va a /cliente.
+  3) Si el link venció (24h) o se perdió, POST /resend-verification reenvía.
+
+  DECISIONES (acordadas): link mágico (un clic, sin códigos) + la verificación
+  SÓLO condiciona el enganche. El login NO se bloquea: cualquiera puede entrar,
+  pero el auto-reclamo de fichas por correo exige correo confirmado.
+
+  · Usuarios existentes: sus fichas ya asignadas NO se ven afectadas (ya tienen
+    su fila en user_businesses). Sólo el reclamo de fichas huérfanas nuevas pide
+    confirmación.
+
+CAMBIO DE COMPORTAMIENTO vs el tarball anterior (retopa_engancha_email)
+──────────────────────────────────────────────────
+  Antes: register/login enganchaban al instante.
+  Ahora: register manda link y NO engancha; login engancha SÓLO si el correo está
+         verificado; el enganche efectivo ocurre al confirmar (verify-email).
+  (El helper linkOrphanBusinessesByEmail no cambió; cambia CUÁNDO se llama.)
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  sql/2026-09-17_email_verification.sql   ← migration: users.verify_token(+expires)+índice
+  sql/schema.sql                          ← actualizado (instalaciones nuevas)
+  backend/src/routes/auth-public.js       ← sendVerificationEmail(); register manda link;
+                                            POST /verify-email; POST /resend-verification;
+                                            login y mfa-verify enganchan sólo si verificado;
+                                            email_verified en las respuestas
+  frontend/js/auth.js                     ← checkSession() procesa ?verify=TOKEN
+                                            (handleEmailVerification) + aviso post-registro
+  frontend/sw.js                          ← v2.44 → v2.45
+
+DEPLOY  (IMPORTANTE: la migration va PRIMERO, antes de levantar el código nuevo)
+──────────────────────────────────────────────────
+1) Backup:
+     cd /opt/retopa && set -a; . ./.env; set +a
+     tar czf /home/hepta/claude/backup_pre_verify_$(date +%F).tar.gz \
+        backend/src/routes/auth-public.js frontend/js/auth.js frontend/sw.js sql/schema.sql
+
+2) Desempaquetar:
+     tar xzf /home/hepta/claude/retopa_email_verification.tar.gz -C /
+
+3) Correr la migration (agrega columnas; idempotente):
+     docker exec -i retopa-db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+       -v ON_ERROR_STOP=1 < /opt/retopa/sql/2026-09-17_email_verification.sql
+
+4) Levantar código nuevo (backend + frontend):
+     cd /opt/retopa && docker compose down && docker compose up -d --build
+
+5) Prueba de humo:
+   · Registrá una cuenta nueva → te debe llegar el correo "Confirmá tu correo".
+   · Cliqueá el botón del correo → caés en el sitio con "¡Correo confirmado!" y,
+     si tenías una ficha con ese correo, te lleva a /cliente.
+   · (SMTP debe estar configurado — el mismo que ya manda los otros correos.)
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/, Postgres real)
+──────────────────────────────────────────────────
+  node _deploy/harnesses/harness_email_verification.js → 21/21
+     (register no engancha y manda token; verify-email confirma+engancha y limpia
+      token; token reusado/expirado → 400; login gatea enganche por verificación;
+      resend regenera token.)
+  node _deploy/harnesses/harness_engancha_email.js      → 9/9
+     (salvaguardas del enganche vía el flujo real de verificación: 2 fichas del
+      mismo correo, case-insensitive, no robar ficha ajena, ignora inactiva, sin
+      duplicados.)
+  Requiere postgresql-16 local (solo test).
+
+HARDENING FUTURO (opcional)
+──────────────────────────────────────────────────
+  · Botón "reenviar correo de confirmación" en el panel/login para usuarios sin
+    verificar (el endpoint /resend-verification ya existe; falta el gancho de UI).
+  · Confirmar el correo también en el ALTA de ficha (sin cuenta) con un link que
+    además ofrezca crear la contraseña — convierte el correo de bienvenida en el
+    puente directo a gestionar. Lo dejamos para un incremento aparte.
+════════════════════════════════════════════════════════════════════════════

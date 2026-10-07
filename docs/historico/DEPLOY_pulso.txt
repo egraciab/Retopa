@@ -1,0 +1,54 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Filtro de rango en "Pulso del directorio" (Panel Admin)
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ CAMBIA
+──────────────────────────────────────────────────
+El gráfico "Pulso del directorio" ahora tiene un dropdown de rango, y la
+GRANULARIDAD se adapta sola para que el goteo reciente se vea bien:
+
+    1 semana   → por día     (≈ 7 puntos)
+    1 mes      → por día      (≈ 30 puntos)   ← nuevo default
+    3 meses    → por semana   (≈ 13 puntos)
+    6 meses    → por mes      (≈ 6 puntos)
+
+Por qué: el pico de la importación inicial (~15k fichas) aplastaba la escala y
+hacía ver una "caída" desanimante. Con default 1 mes por día, ves el ritmo real
+de altas orgánicas; y si querés el histórico completo, elegís 6 meses (por mes).
+El subtítulo de la tarjeta cambia solo: "(altas por día / semana / mes)".
+
+Detalle técnico: la serie rellena con CEROS los períodos sin altas
+(generate_series), así la línea es continua y honesta —no “inventa” tendencia.
+Las badges 7 DÍAS / 30 DÍAS de la tarjeta siguen igual.
+
+ARCHIVOS MODIFICADOS
+──────────────────────────────────────────────────
+  backend/src/routes/admin.js
+      · NUEVO endpoint GET /dashboard/growth?range=1w|1m|3m|6m
+        (bucket adaptativo + relleno de ceros; excluye inactivas)
+  frontend/admin/index.html
+      · dropdown de rango + subtítulo dinámico en la tarjeta del Pulso
+  frontend/admin/js/dashboard.js
+      · loadGrowth(range) + formato de etiquetas por bucket; el dashboard
+        arranca con 1 mes por defecto (compat con datos viejos {month})
+
+DEPLOY  (subís el .tar.gz a /home/hepta/claude/ · proyecto en /opt/retopa/)
+──────────────────────────────────────────────────
+1) Respaldo:
+      cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_pulso_$(date +%F).tar.gz \
+        backend/src/routes/admin.js frontend/admin/index.html frontend/admin/js/dashboard.js
+2) Extraer sobre la raíz:
+      tar xzf /home/hepta/claude/retopa_pulso_rango.tar.gz -C /
+3) Reconstruir:
+      cd /opt/retopa && docker compose up -d --build
+   Sin migración de base.
+
+VERIFICACIÓN
+──────────────────────────────────────────────────
+  node harness_growth_endpoint.js → 15/15  (consulta real contra Postgres)
+  node harness_growth_ui.js       → 11/11  (dropdown + etiquetas, navegador real)
+
+  Probado: cada rango con su bucket; 1 mes excluye lo de 40 días; 3 meses incluye
+  40 días pero NO la importación de 120 días; 6 meses muestra el pico de 15k;
+  relleno de ceros; exclusión de inactivas; formato de etiquetas por día/mes.
+════════════════════════════════════════════════════════════════════════════

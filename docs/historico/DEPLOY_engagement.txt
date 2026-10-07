@@ -1,0 +1,70 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Plantillas de engagement (consejos/tips) + filtro "sin acceso"
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ SE AGREGA
+──────────────────────────────────────────────────
+A) 3 PLANTILLAS NUEVAS orientadas a que el usuario USE el sistema. Todas
+   editables desde Admin → Plantillas (asunto/textos/botón) y enviables por
+   usuario desde el avión verde del panel Usuarios (o en Prueba desde Plantillas):
+
+   1) 💡 tipsFicha  — "Consejos para aprovechar tu ficha"
+      5 tips accionables (fotos, WhatsApp, descripción/categorías, reseñas,
+      horarios). Ideal para dormidos o recién verificados.
+   2) 👋 reactivation — "Te extrañamos / volvé a tu panel"
+      Reactivación para el segmento SIN ACCESO. Combina con el filtro nuevo (B).
+   3) 🚀 firstSteps — "Primeros pasos" (onboarding)
+      Checklist de 3 pasos para que el usuario nuevo active su ficha.
+
+   · Voseo paraguayo. Usan los placeholders {name}, {businessName}, {siteName}.
+   · Si el usuario NO tiene ficha propia, caen con elegancia a "Tu empresa" y
+     saludo sin nombre (no dejan "¡Hola !" colgado).
+   · Overrides editables por site_config (tpl_<key>_<campo>), igual que el resto.
+
+B) FILTRO "SIN ACCESO" en el panel Usuarios (para campañas de reactivación):
+   Nuevo desplegable "Cualquier acceso / Sin acceso +7 / +30 / +90 días".
+   Filtra por last_seen_at e INCLUYE a los que nunca entraron (last_seen NULL).
+   El contador de la lista (paginación) refleja cuántos caen en el segmento.
+   Flujo típico: filtrás "+30 días" → ves los dormidos → a cada uno le mandás
+   la plantilla 👋 reactivation con el avión verde.
+
+ARCHIVOS MODIFICADOS
+──────────────────────────────────────────────────
+  backend/src/config/mail.js                 (+3 plantillas: tipsFicha,
+                                              reactivation, firstSteps)
+  backend/src/routes/admin.notify.routes.js  (buildNotifyTestData: datos de las
+                                              3 nuevas → preview y envío REAL)
+  frontend/admin/js/templates.js             (TEMPLATE_DEFS: 3 entradas nuevas →
+                                              editor + picker del modal Usuarios)
+  backend/src/routes/admin.js                (GET /users: parámetro inactive_days)
+  frontend/admin/index.html                  (desplegable "sin acceso" en toolbar)
+  frontend/admin/js/users.js                 (loadAdminUsers envía inactive_days)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_engagement_$(date +%F).tar.gz \
+     backend/src/config/mail.js backend/src/routes/admin.notify.routes.js \
+     backend/src/routes/admin.js frontend/admin/js/templates.js \
+     frontend/admin/js/users.js frontend/admin/index.html
+2) tar xzf /home/hepta/claude/retopa_engagement.tar.gz -C /
+3) cd /opt/retopa && docker compose up -d --build
+   Sin migración de base (usa last_seen_at, que ya existía).
+
+VERIFICACIÓN (harnesses incluidos en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_engagement_templates.js → 31/31  (las 3 plantillas renderizan de
+     verdad vía mail.js, fallback sin ficha/sin nombre, override editable, y
+     están cableadas en buildNotifyTestData + TEMPLATE_DEFS + mail.js)
+  node harness_users_inactive.js       → 15/15  (Postgres real: +7/+30/+90 días,
+     incluye NULL, combina con role, ignora valores inválidos; + contrato fuente)
+  node harness_users_filter_ui.js      → 13/13  (navegador real: el filtro
+     alimenta inactive_days en la URL y el picker del modal lista las 3 nuevas)
+  (regresión OK: harness_users_lastseen 16/16 · harness_users_ui 17/17)
+
+PARKED (para cuando quieras)
+──────────────────────────────────────────────────
+  · Envío EN LOTE a un segmento (p.ej. "mandar reactivation a los N sin acceso
+    +30 días" de un solo clic). Hoy el envío es 1×1 por usuario; el lote sería
+    un endpoint nuevo + confirmación, con cooldown para no spamear.
+  · Agrupar "Plantillas" en submenú/pestañas (ya son 20+).
+════════════════════════════════════════════════════════════════════════════

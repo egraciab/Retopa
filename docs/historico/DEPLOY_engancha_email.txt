@@ -1,0 +1,60 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — ENGANCHE de fichas por correo (backend)  ·  complemento de la Etapa 2.2
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ HACE
+──────────────────────────────────────────────────
+Cuando un usuario se AUTENTICA (registro, login o verificación 2FA), el sistema
+le asigna automáticamente como DUEÑO las empresas cuyo email coincide con el
+suyo y que todavía NO tienen dueño. Así, la ficha que alguien creó desde el
+registro corto SIN sesión (Etapa 2.2) queda enganchada a su cuenta apenas se
+registra/loguea con ese mismo correo — sin pasos manuales.
+
+SALVAGUARDAS (verificadas con Postgres real)
+──────────────────────────────────────────────────
+  · NO roba fichas que ya tienen dueño (NOT EXISTS is_owner=TRUE).
+  · Case-insensitive: lower(business.email) = lower(user.email).
+  · Solo fichas is_active = TRUE.
+  · Nunca duplica la fila (user_id, business_id) — reintentos seguros.
+  · Best-effort: si la consulta fallara, se traga el error y NO rompe el
+    login/registro (solo loguea en consola).
+  · has_business en la respuesta se calcula DESPUÉS del enganche, así el front
+    redirige a /cliente cuando corresponde.
+
+ARCHIVOS MODIFICADOS
+──────────────────────────────────────────────────
+  backend/src/routes/auth-public.js
+     · nuevo helper linkOrphanBusinessesByEmail(userId, email)
+     · POST /register  → engancha + devuelve user.has_business
+     · POST /login     → engancha ANTES de calcular has_business
+     · POST /mfa-verify→ engancha ANTES de calcular has_business
+
+  (Cambio SOLO de backend. No toca el frontend. Se puede deployar junto con la
+   Etapa 2.2 o por separado; el enganche cobra sentido una vez que hay fichas
+   creadas sin login, es decir con la Etapa 2.2 en producción.)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_engancha_$(date +%F).tar.gz \
+     backend/src/routes/auth-public.js
+2) tar xzf /home/hepta/claude/retopa_engancha_email.tar.gz -C /
+3) cd /opt/retopa && docker compose down && docker compose up -d --build
+
+VERIFICACIÓN (harness en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node _deploy/harnesses/harness_engancha_email.js → 16/16
+     (levanta un Postgres efímero, monta el router REAL auth-public.js y pega por
+      HTTP a /register y /login: engancha 1..n fichas por correo, case-insensitive,
+      no roba la ficha ajena, ignora inactivas, no duplica en reintentos.)
+
+  Requiere postgresql-16 local para el harness (solo test; en prod usa tu DB real).
+
+RECOMENDACIÓN DE HARDENING (futuro, no incluido)
+──────────────────────────────────────────────────
+  Hoy el registro de usuario NO verifica el correo (no hay doble opt-in en toda
+  la plataforma). Eso significa que alguien podría registrarse con un correo que
+  no controla y enganchar fichas creadas con ese correo. Coincide con el modelo
+  de confianza actual (fichas nacen "No verificadas"), pero el hardening correcto
+  es agregar verificación de email (link/código) al registro. Cuando quieras lo
+  encaramos como su propio incremento.
+════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,116 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Informe de auditoría de seguridad (pasada de código)
+Motivo: mensaje externo ofreciendo "datos de una brecha".
+════════════════════════════════════════════════════════════════════════════
+
+RESUMEN
+──────────────────────────────────────────────────
+Se encontró y CORRIGIÓ 1 vulnerabilidad CRÍTICA (apropiación de negocios sin
+autenticación). El resto del código auditado se ve sólido: consultas
+parametrizadas (sin inyección SQL detectada), forgot-password sin filtración de
+si el email existe, paneles admin/cliente/embajador/promociones/uploads con
+autenticación, y la clave interna falla cerrada. Se listan además mejoras de
+robustez (no son agujeros activos, pero conviene aplicarlas).
+
+════════════════════════════════════════════════════════════════════════════
+🔴 CRÍTICO — CORREGIDO en este paquete
+────────────────────────────────────────────────
+Endpoints SIN autenticación en /api/v2/claim:
+    POST /api/v2/claim/approve
+    POST /api/v2/claim/reject
+    POST /api/v2/claim/generate-token
+
+Impacto (grave): estaban montados en /api/v2/claim (fuera del prefijo /admin,
+así que NINGÚN middleware los protegía). Cualquiera en internet podía:
+  · /generate-token → pedir un claim_token para CUALQUIER ficha (de las ~14.000)
+    y luego, con ese token en /reclamar, completar /claim/submit con su propio
+    email/contraseña → quedarse como DUEÑO de un negocio ajeno.
+  · /approve → marcar cualquier claim pendiente como aprobado + verificado.
+  · /reject → rechazar reclamos ajenos.
+El propio código tenía el comentario "Verificar que es admin" … que nunca se
+implementó.
+
+Nota: NO son los que usa el panel (el panel usa /api/v2/admin/claims/*, que sí
+estaba protegido). Estos tres eran duplicados legacy que nadie llama.
+
+Corrección: se agregó un middleware requireAdmin (JWT válido + rol admin/godmode,
+fail-closed) a los tres. Verificado por HTTP: sin token → 401, token no-admin →
+403, admin/godmode → 200. /info y /submit siguen públicos (los necesita el dueño).
+
+¿Podría ser ESTA la "brecha" que menciona el contacto externo?
+Es un candidato muy fuerte: permite apropiarse de fichas sin credenciales. Con
+esto cerrado, ese vector queda tapado. Aun así, tratá el aviso como posible
+incidente real hasta descartarlo (ver "Qué revisar" abajo).
+
+════════════════════════════════════════════════════════════════════════════
+🟡 RECOMENDACIONES DE ROBUSTEZ (no son agujeros activos)
+────────────────────────────────────────────────
+1) JWT_SECRET con default adivinable en el código:
+   admin.js / upload.js / client.js usan  || 'retopa-secret-key'
+   promotions.routes.js usa               || 'retopa_secret'  (¡distinto!)
+   En producción NO se usa el default (el .env define JWT_SECRET, por eso el panel
+   funciona), pero es una mina: si algún día arranca sin esa variable, los tokens
+   serían falsificables. Recomendado: quitar el default y fallar al arrancar si
+   falta (como ya hace auth-public.js). CONFIRMÁ que el JWT_SECRET del .env sea
+   largo y aleatorio (32+ caracteres); si dudás de que se filtró, rotálo (eso
+   desloguea a todos, pero invalida cualquier token robado).
+
+2) Rate-limit en endpoints sensibles de auth:
+   /auth/login, /auth/forgot-password, /auth/register, /auth/mfa-verify sólo
+   tienen el límite general (300/min por IP) → poco para frenar fuerza bruta.
+   Recomendado: límite estricto (p.ej. 10 cada 15 min por IP) en esos.
+
+3) Defensa en profundidad en sub-routers admin:
+   /admin/notify hoy queda protegido sólo porque comparte el prefijo /api/v2/admin
+   con el router admin (que corre requireRole) y por el ORDEN de montaje. Funciona,
+   pero es frágil: conviene que cada sub-router (notify, uploads, promo-admin,
+   amb-admin) exija su propio requireRole explícitamente.
+
+4) Subida de archivos anónima (/api/v2/upload/public):
+   Permite subir imágenes sin login (para el formulario de registro). Tiene tope
+   de 10MB y filtro de mimetype, pero conviene sumarle el rate-limit estricto para
+   evitar abuso de almacenamiento.
+
+════════════════════════════════════════════════════════════════════════════
+✅ LO QUE ESTÁ BIEN (auditado)
+────────────────────────────────────────────────
+· Consultas SQL parametrizadas — no se detectó inyección.
+· forgot-password responde siempre igual (no revela si el email existe).
+· /api/v2/internal/* exige x-internal-key y FALLA CERRADO si la clave no está.
+· Paneles admin (router.use(requireRole)), cliente (router.use(requireAuth)),
+  embajador (requireAuth+requireAmbassador por ruta) y promociones: autenticados.
+· Contraseñas con bcrypt; tokens de reset con expiración; sesiones con vencimiento.
+
+════════════════════════════════════════════════════════════════════════════
+DEPLOY (crítico — aplicá cuanto antes)
+────────────────────────────────────────────────
+1) Respaldo:
+      cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_sec_$(date +%F).tar.gz \
+        backend/src/routes/claim.routes.js
+2) Extraer:
+      tar xzf /home/hepta/claude/retopa_seguridad_claim.tar.gz -C /
+3) Reconstruir:
+      cd /opt/retopa && docker compose up -d --build
+   Sin migración de base.
+
+VERIFICACIÓN (harness incluido)
+──────────────────────────────────────────────────
+  node harness_claim_authz.js → 17/17  (por HTTP contra el router real):
+    approve/reject/generate-token → 401 sin token, 403 sin rol admin, 200 con
+    admin; /info y /submit siguen públicos.
+
+════════════════════════════════════════════════════════════════════════════
+QUÉ REVISAR EN PRODUCCIÓN (posible incidente)
+────────────────────────────────────────────────
+· Fichas con claim_status='approved' o claimed_by seteado que NO reconozcas como
+  reclamos legítimos (pudieron aprobarse por el agujero):
+    SELECT id, name, claim_status, claimed_at, claimed_by
+    FROM businesses WHERE claim_status IN ('approved','pending') ORDER BY claimed_at DESC;
+· Usuarios creados recientemente vinculados como dueños que no cuadren.
+· Logs de nginx/backend: POST a /api/v2/claim/approve|reject|generate-token.
+· Si confirmás abuso: rotar JWT_SECRET, forzar reset de contraseñas de cuentas
+  sospechosas, y revisar qué fichas cambiaron de dueño.
+
+RESPUESTA AL CONTACTO (Kristen): mantené el tono profesional, pedí detalles del
+hallazgo SIN que comparta datos de terceros, no negocies montos ni confirmes nada.
+════════════════════════════════════════════════════════════════════════════

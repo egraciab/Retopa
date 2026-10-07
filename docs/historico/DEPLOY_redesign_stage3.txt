@@ -1,0 +1,54 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Rediseño mobile (opción A) · ETAPA 3 (parte 1/N): tarjeta COMPACTA
+de resultados  ·  solo frontend
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ ENTRA
+──────────────────────────────────────────────────
+Nueva tarjeta de resultados mobile-first (reemplaza la tarjeta grande que
+apilaba una imagen enorme y dejaba ver 1 resultado por pantalla):
+  · Miniatura 64px (88px en desktop). Si no hay foto, cuadro tintado por rubro
+    con la inicial del negocio.
+  · Nombre + check de verificado.
+  · Meta en una línea: "Rubro · Ciudad" + badge de distancia si hay ubicación.
+  · Estado en vivo: Abierto/Cerrado (con "cierra 20:00" / "abre mañana").
+  · Rating: "4.6 (12)" cuando hay reseñas; **"Sin reseñas aún"** cuando no
+    (nunca más "0.0" — CRITERIO #4).
+  · Acciones de 44px: Llamar (tel:), WhatsApp (verde), Llegar (Google Maps).
+    Tocar una acción NO abre el perfil (la tarjeta sí).
+Con esto entran ≥3 tarjetas por pantalla a 390×844 (CRITERIO #2).
+
+Lo que NO cambió: performSearch, paginación, filtros, el toggle lista/tarjetas
+(la vista "lista" sigue usando renderListRow), y el SSR de la ficha (server.js).
+
+PENDIENTE de la Etapa 3 (próximos incrementos):
+  · "Abiertos ahora, cerca tuyo" en el home (usa esta misma tarjeta).
+  · Acceso a TODAS las categorías (además de los 6 rubros fijos) — tu pedido.
+  · Chips de filtro sticky + "Ver más resultados" + bloque "¿No encontrás?".
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  frontend/index.html   (CSS .rp-card/.rp-act en el bloque rp-redesign)
+  frontend/js/search.js (renderBusinessCard compacta + helper rpMapsUrl)
+  frontend/sw.js        (v2.46 → v2.47)
+
+DEPLOY (solo frontend)
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_e3_$(date +%F).tar.gz \
+     frontend/index.html frontend/js/search.js frontend/sw.js
+2) tar xzf /home/hepta/claude/retopa_redesign_stage3.tar.gz -C /
+3) cd /opt/retopa && docker compose down && docker compose up -d --build
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_redesign_stage3.js  → 15/15  (390×844, con el renderBusinessCard REAL:
+     miniatura 64px, acciones ≥44px, tarjeta ≤190px → ≥3/pantalla, "Sin reseñas aún",
+     sin "0.0", Llamar/WhatsApp/Llegar con hrefs correctos, stopPropagation en acciones)
+  node harness_redesign_stage22.js → 20/20  (regresión del registro/flujo)
+  (stage1/2/2.1 siguen 20/15/22)
+
+  Correr:  cd /opt/retopa/frontend && \
+     npx --yes tailwindcss@3.4.0 -i ./css/tailwind-main.css -o ./public/css/main.css \
+        --config tailwind.config.js && \
+     node /opt/retopa/_deploy/harnesses/harness_redesign_stage3.js
+════════════════════════════════════════════════════════════════════════════

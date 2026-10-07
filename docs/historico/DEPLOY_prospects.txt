@@ -1,0 +1,104 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Admin: submenú "Prospectos" (contacto por WhatsApp a fichas de prospección)
+· backend (route + migración) + frontend admin
+════════════════════════════════════════════════════════════════════════════
+
+⚠ IMPORTANTE — LEER PRIMERO (cambio respecto del paquete anterior)
+──────────────────────────────────────────────────
+En prod YA EXISTÍA una tabla llamada `prospect_outreach` (otro esquema, contacto
+por business_id/telefono, con datos — no la tocamos). La migración anterior fallaba
+justo por eso ("column whatsapp does not exist") y por eso el panel salía vacío.
+
+SOLUCIÓN: esta feature ahora usa una tabla NUEVA e INDEPENDIENTE llamada
+`prospect_wa_outreach`. Conviven sin pisarse. La `prospect_outreach` vieja queda
+INTACTA. No corras ningún DROP.
+
+QUÉ ENTRA
+──────────────────────────────────────────────────
+Panel Admin → GESTIÓN COMERCIAL → "Prospectos": lista las fichas cargadas por
+prospección (filtradas por businesses.source), AGRUPADAS por número de WhatsApp
+(una fila por número), para contactarlas de a una desde el WhatsApp del operador.
+
+BACKEND (router nuevo, patrón admin.notify.routes.js)
+  · Migración sql/2026-09-21_prospect_wa_outreach.sql → tabla prospect_wa_outreach
+    (whatsapp UNIQUE = clave del grupo, estado con CHECK, fecha_contacto, notas).
+  · routes/prospects.routes.js montado en /api/v2/admin/prospects (requireAdmin):
+      - GET  /sources            → orígenes distintos con conteo (para el dropdown;
+                                    NO hardcodea el source).
+      - GET  /?source=…&rubro=&ciudad=&estado=&q=  → fichas del origen, con rubro
+        primario (business_categories.is_primary + categories), ciudad, slug,
+        ficha_url, AGRUPADAS por whatsapp, con estado de outreach (LEFT JOIN a
+        prospect_wa_outreach, default 'pendiente') + summary (por_estado,
+        enviados_hoy). Fichas sin whatsapp vienen como filas individuales
+        (whatsapp=null).
+      - PATCH /outreach/:whatsapp → upsert de estado/notas. Marca fecha_contacto
+        al pasar a 'enviado'.
+  · app.js: monta el router ANTES de adminRoutes (especificidad de path).
+
+  NOTA: el path real del admin es /api/v2/admin (no /api/admin) — se respetó la
+  convención existente del proyecto.
+
+FRONTEND ADMIN (admin/js/prospects.js + entrada de menú)
+  · Item "Prospectos" en GESTIÓN COMERCIAL; sección section-prospectos; wiring en
+    showSection/titles/sectionGroup (config.js).
+  · Filtros: origen (dropdown /sources), rubro, ciudad, estado, búsqueda por
+    nombre. (source dispara fetch; rubro/ciudad/estado/búsqueda filtran del lado
+    del cliente para respuesta inmediata; los contadores quedan sobre el TOTAL
+    del origen.)
+  · Plantilla de mensaje editable (textarea, se guarda en localStorage) con
+    placeholders {nombre} {rubro} {ciudad} {link_ficha}. En grupos multi-sucursal
+    usa la ficha PRINCIPAL (la primera) y un solo {link_ficha}.
+  · {link_ficha} = URL pública real: {site_url}/negocio/{slug} (ruta que sirve la
+    ficha en server.js).
+  · Botón "WhatsApp" por fila → abre https://wa.me/{whatsapp}?text={mensaje} en
+    pestaña nueva y marca el grupo 'enviado' con fecha (PATCH). Deshabilitado si
+    no hay whatsapp.
+  · Dropdown de estado por fila (respondio/reclamo/rechazo) + notas editables.
+  · Contador "Enviados hoy: N" y totales por estado. Aviso suave si enviados hoy
+    ≥ 30 (anti-ban de WhatsApp).
+  · NO hace envío automático/masivo, ni toca la importación.
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  sql/2026-09-21_prospect_wa_outreach.sql     (NUEVO — migración, tabla nueva)
+  backend/src/routes/prospects.routes.js      (NUEVO — router)
+  backend/src/app.js                          (monta el router)
+  frontend/admin/index.html                   (menú + sección + <script>)
+  frontend/admin/js/config.js                 (showSection: título/grupo/init)
+  frontend/admin/js/prospects.js              (NUEVO — página)
+
+DEPLOY (migración PRIMERO, luego rebuild)
+──────────────────────────────────────────────────
+1) Backup:
+     cd /opt/retopa && set -a; . ./.env; set +a
+     tar czf /home/hepta/claude/backup_pre_prospects_$(date +%F).tar.gz \
+        backend/src/app.js frontend/admin/index.html frontend/admin/js/config.js
+2) Desempaquetar:
+     tar xzf /home/hepta/claude/retopa_prospects.tar.gz -C /
+3) Migración (crea la tabla NUEVA prospect_wa_outreach; idempotente; NO toca la
+   prospect_outreach existente):
+     docker exec -i retopa-db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+       -v ON_ERROR_STOP=1 < /opt/retopa/sql/2026-09-21_prospect_wa_outreach.sql
+   (Verificación opcional: ambas tablas deben existir y la vieja seguir con sus datos)
+     docker exec -i retopa-db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+       "SELECT to_regclass('prospect_outreach') AS vieja, to_regclass('prospect_wa_outreach') AS nueva;"
+4) Levantar código nuevo (backend + frontend):
+     cd /opt/retopa && docker compose down && docker compose up -d --build
+   (El build del frontend recompila Tailwind incluyendo admin/js/prospects.js;
+    no se envía public/css/main.css.)
+5) Prueba de humo: entrá al Admin → Prospectos. Elegí origen "prospeccion_agente":
+   deberías ver ~107 fichas agrupadas (Cerrajería Nabil sale una vez con ×4), las
+   2 sin WhatsApp marcadas, y el botón WhatsApp abriendo el chat con tu mensaje.
+
+VERIFICACIÓN (harnesses en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_prospects.js        → 21/21  (Postgres real: /sources con conteo,
+     agrupación por whatsapp (Nabil×4), fichas sin whatsapp, rubro primario,
+     ficha_url, PATCH upsert + fecha al 'enviado', summary, filtros, auth 401,
+     + COEXISTENCIA: prospect_outreach vieja queda intacta y prospect_wa_outreach
+     se crea aparte)
+  node harness_prospects_admin.js  → 19/19  (prospects.js real: render/agrupación,
+     "sin WhatsApp" deshabilitado, plantilla con placeholders, wa.me con mensaje
+     renderizado + link real, PATCH 'enviado', contadores, estado/notas, aviso ≥30,
+     plantilla persistida en localStorage)
+════════════════════════════════════════════════════════════════════════════

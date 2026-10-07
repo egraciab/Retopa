@@ -1,0 +1,51 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Panel Usuarios más útil (último acceso + enviar correo) + fix KPIs
+════════════════════════════════════════════════════════════════════════════
+
+QUÉ SE AGREGA / ARREGLA
+──────────────────────────────────────────────────
+1) Columna "Último acceso" (desde last_seen_at, que ya se registraba):
+   "En línea" / "Hoy HH:MM" / "Ayer" / "hace N días" / "hace N meses" / "Nunca",
+   con color por recencia → ves de un vistazo quién está activo y quién dormido.
+2) Acción "Enviar correo" (avión verde) por usuario: abre un modal, elegís una
+   plantilla y se manda al email del usuario. Si el usuario tiene ficha propia,
+   la usa como datos para los placeholders ({businessName}, etc.). Reusa
+   /notify/send-template y queda en Logs de correos. Ideal para invitar a los
+   dormidos a usar el sistema, mandar tips, bienvenidas, etc.
+3) FIX de las tarjetas KPI (bonus):
+   · "Total" mostraba 1 → era un bug: la consulta de conteo arrastraba el
+     GROUP BY. Ahora el total es correcto.
+   · "Activos / Clientes / Admins / GodMode" contaban SOLO la página actual
+     (máx 25). Ahora el backend devuelve conteos GLOBALES y las 5 tarjetas son
+     correctas sin importar filtro ni página.
+
+ARCHIVOS MODIFICADOS
+──────────────────────────────────────────────────
+  backend/src/routes/admin.js       (GET /users: last_seen_at + owned_slug +
+                                      count limpio + KPIs globales en `stats`)
+  frontend/admin/index.html         (columna "Último acceso" en la tabla)
+  frontend/admin/js/users.js        (celda de último acceso + acción Enviar
+                                      correo + modal + KPIs desde data.stats)
+
+DEPLOY
+──────────────────────────────────────────────────
+1) cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_usuarios_$(date +%F).tar.gz \
+     backend/src/routes/admin.js frontend/admin/index.html frontend/admin/js/users.js
+2) tar xzf /home/hepta/claude/retopa_usuarios.tar.gz -C /
+3) cd /opt/retopa && docker compose up -d --build
+   Sin migración de base (last_seen_at ya existía).
+
+VERIFICACIÓN (harnesses incluidos)
+──────────────────────────────────────────────────
+  node harness_users_lastseen.js → 16/16  (consulta real: last_seen_at, owned_slug,
+     count limpio que arregla el "Total:1", y KPIs globales)
+  node harness_users_ui.js       → 17/17  (navegador real: etiqueta de último
+     acceso, modal de envío con plantillas, POST /notify/send-template correcto)
+
+PARKED (para cuando quieras)
+──────────────────────────────────────────────────
+  · Agrupar "Plantillas" en submenú/pestañas + plantilla nueva "consejos para
+    aprovechar tu ficha / tips de uso".
+  · Filtro/segmento en Usuarios: "sin acceso hace +30 días" → para campañas de
+    reactivación en lote.
+════════════════════════════════════════════════════════════════════════════

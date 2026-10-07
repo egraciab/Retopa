@@ -1,0 +1,68 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Endurecimiento de seguridad (defensa en profundidad)
+════════════════════════════════════════════════════════════════════════════
+
+⚠️ IMPORTANTE — este bundle INCLUYE también el fix crítico de /claim (acumulativo,
+claim.routes.js). Si ya aplicaste retopa_seguridad_claim.tar.gz, esto es seguro
+encima; si NO lo aplicaste, este bundle lo cubre igual.
+
+⚠️ REQUISITO — a partir de este bundle el backend NO arranca si falta JWT_SECRET
+en el entorno (antes caía a un default adivinable). En tu producción el .env ya
+lo define (por eso el panel funciona), así que el arranque normal NO se ve
+afectado. CONFIRMÁ que JWT_SECRET sea largo y aleatorio (32+ caracteres).
+
+QUÉ ENDURECE (4 mejoras — ninguna era un agujero activo)
+──────────────────────────────────────────────────
+1) JWT_SECRET centralizado (backend/src/config/jwt.js). Se eliminaron los
+   defaults adivinables ('retopa-secret-key' / 'retopa_secret') que estaban
+   repartidos por 6 archivos. Ahora hay una sola fuente y falla al arrancar si no
+   está configurado → nunca corre con un secreto adivinable.
+2) Rate-limit contra fuerza bruta en credenciales (auth-public):
+   · /login y /admin-login: 20 intentos FALLIDOS / 15 min por IP.
+   · /register, /forgot-password, /reset-password, /mfa-send, /mfa-verify:
+     8 / 15 min por IP.
+   (El límite general de la API sigue en 300/min.)
+3) Auth explícita en /api/v2/admin/notify (envío masivo de emails + generación de
+   claim_tokens). Antes quedaba protegido SOLO por el orden de montaje; ahora
+   exige rol admin/godmode en TODAS sus rutas.
+4) Rate-limit en la subida pública de imágenes (/api/v2/upload/public):
+   15 / 15 min por IP, contra abuso de almacenamiento.
+
+ARCHIVOS MODIFICADOS
+──────────────────────────────────────────────────
+  backend/src/config/jwt.js                 (NUEVO — secreto centralizado + fail-hard)
+  backend/src/routes/admin.js               (usa config/jwt)
+  backend/src/routes/upload.js              (config/jwt + rate-limit público)
+  backend/src/routes/client.js              (config/jwt)
+  backend/src/routes/promotions.routes.js   (config/jwt)
+  backend/src/routes/auth-public.js         (config/jwt + rate-limit credenciales)
+  backend/src/routes/claim.routes.js        (config/jwt + FIX CRÍTICO requireAdmin)
+  backend/src/routes/admin.notify.routes.js (config/jwt + requireAdmin explícito)
+
+DEPLOY  (subís el .tar.gz a /home/hepta/claude/ · proyecto en /opt/retopa/)
+──────────────────────────────────────────────────
+0) CONFIRMÁ el secreto:
+      grep JWT_SECRET /opt/retopa/.env    # debe existir y ser largo/aleatorio
+1) Respaldo:
+      cd /opt/retopa && tar czf /home/hepta/claude/backup_pre_hardening_$(date +%F).tar.gz \
+        backend/src/routes/admin.js backend/src/routes/upload.js backend/src/routes/client.js \
+        backend/src/routes/promotions.routes.js backend/src/routes/auth-public.js \
+        backend/src/routes/claim.routes.js backend/src/routes/admin.notify.routes.js
+2) Extraer:
+      tar xzf /home/hepta/claude/retopa_hardening.tar.gz -C /
+3) Reconstruir:
+      cd /opt/retopa && docker compose up -d --build
+4) Verificá que el backend levantó bien:
+      docker compose logs --tail=30 backend    # NO debe decir "[FATAL] JWT_SECRET..."
+   Sin migración de base.
+
+VERIFICACIÓN (harnesses incluidos)
+──────────────────────────────────────────────────
+  node harness_hardening.js   → 13/13  (config/jwt; notify exige admin por HTTP;
+      limiters aplicados a credenciales y subida pública)
+  node harness_claim_authz.js → 17/17  (el fix crítico de /claim, por HTTP)
+
+NOTA — si sospechás que el JWT_SECRET pudo filtrarse, rotálo (cambiá el valor en
+.env y reconstruí). Eso invalida TODOS los tokens (todos deben re-loguear), pero
+también invalida cualquier token robado.
+════════════════════════════════════════════════════════════════════════════

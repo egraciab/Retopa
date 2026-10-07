@@ -1,0 +1,55 @@
+════════════════════════════════════════════════════════════════════════════
+RetoPA — Admin/Prospectos: fix de emojis en el mensaje de WhatsApp
+· cambio SOLO en frontend admin (admin/js/prospects.js). Sin migración. Sin SW.
+════════════════════════════════════════════════════════════════════════════
+
+DIAGNÓSTICO
+──────────────────────────────────────────────────
+El "�" que llegaba a WhatsApp NO era un problema de codificación de nuestro lado:
+encodeURIComponent('👋') = %F0%9F%91%8B (UTF-8 correcto, WhatsApp Web lo decodifica
+bien). El "�" es un carácter de reemplazo (U+FFFD) que quedó GUARDADO en la
+plantilla, típico de pegar un emoji desde una fuente mal codificada. Al enviarse,
+ese carácter roto viajaba tal cual.
+
+QUÉ CAMBIA (admin/js/prospects.js)
+──────────────────────────────────────────────────
+1) Saneo del mensaje de salida: se quitan los caracteres rotos (U+FFFD) y los
+   espacios dobles que dejan, antes de armar el link de WhatsApp. Los emojis
+   REALES pasan intactos. → nunca más se manda un "�".
+2) Saneo al guardar la plantilla: el valor persistido en localStorage se limpia,
+   así el carácter roto no sobrevive a la próxima carga.
+3) Barra de emojis en el editor de plantilla: botones (👋 🙌 ✅ 📍 📞 🏪 ⭐ 🔧 💬 🙂)
+   que insertan el CÓDIGO real en la posición del cursor. Recomendado para no
+   volver a pegar emojis rotos de otro lado.
+4) Respaldo al portapapeles: al abrir el chat, el mensaje limpio (con sus emojis)
+   queda copiado. Si el prefill de WhatsApp llegara a verse raro, se pega con
+   Ctrl/Cmd+V en vez de reescribir. Best-effort, no bloquea la apertura.
+
+NOTA: si tu plantilla actual ya tiene un "�" guardado, se limpiará solo al abrir
+el panel y guardar (o al tocar cualquier tecla en el textarea). Para el emoji que
+querías ahí, usá los botones de la barra.
+
+ARCHIVOS
+──────────────────────────────────────────────────
+  frontend/admin/js/prospects.js   (MODIFICADO)
+
+DEPLOY (sin migración; solo rebuild de frontend)
+──────────────────────────────────────────────────
+1) Backup rápido:
+     cp /opt/retopa/frontend/admin/js/prospects.js \
+        /home/hepta/claude/prospects.js.bak_$(date +%F)
+2) Desempaquetar:
+     tar xzf /home/hepta/claude/retopa_prospects_emoji.tar.gz -C /
+3) Rebuild (el admin es estático; igual conviene rebuild del frontend):
+     cd /opt/retopa && docker compose up -d --build
+   (No hace falta tocar la base ni bumpear sw.js: el admin está fuera del SW.)
+4) Prueba: Admin → Prospectos. En "Plantilla del mensaje" tocá un botón de emoji
+   (p. ej. 👋) para insertarlo, y probá el botón WhatsApp de una fila: el chat
+   debe abrir con el emoji bien y el mensaje queda copiado por si querés pegarlo.
+
+VERIFICACIÓN (harness en _deploy/harnesses/)
+──────────────────────────────────────────────────
+  node harness_prospects_admin.js  → 24/24  (incluye: chips de emoji, saneo de
+     U+FFFD (no va %EF%BF%BD a WhatsApp), emoji real preservado (%F0%9F%91%8B),
+     plantilla guardada sin carácter roto, inserción de emoji en el cursor)
+════════════════════════════════════════════════════════════════════════════
