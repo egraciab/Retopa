@@ -23,7 +23,7 @@ const SELECT_BIZ = `
                  ORDER BY bcx.is_primary DESC, bcx.position),'[]'::json)
           FROM business_categories bcx JOIN categories cx ON cx.id=bcx.category_id
           WHERE bcx.business_id=b.id) AS categories
-  FROM businesses b JOIN categories c ON b.category_id = c.id
+  FROM businesses b LEFT JOIN categories c ON b.category_id = c.id
   WHERE b.id = ANY($1::int[])
   ORDER BY array_position($1::int[], b.id)
 `;

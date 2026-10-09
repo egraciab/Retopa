@@ -326,7 +326,7 @@ router.get('/businesses', async (req, res) => {
                        c.color as "categoryColor", c.bg_color as "categoryBg",
                        (SELECT COALESCE(json_agg(json_build_object('id',cx.id,'slug',cx.slug,'name',cx.name,'icon',cx.icon,'color',cx.color,'bgColor',cx.bg_color,'isPrimary',bcx.is_primary) ORDER BY bcx.is_primary DESC, bcx.position),'[]'::json)
                         FROM business_categories bcx JOIN categories cx ON cx.id=bcx.category_id WHERE bcx.business_id=b.id) AS categories${distanceSelect}
-                FROM businesses b JOIN categories c ON b.category_id = c.id
+                FROM businesses b LEFT JOIN categories c ON b.category_id = c.id
                 WHERE ${where.join(' AND ')}
                 ${orderBy}
                 LIMIT $${idx} OFFSET $${idx+1}
@@ -336,7 +336,7 @@ router.get('/businesses', async (req, res) => {
             const result = await pool.query(query, params);
             data = result.rows;
 
-            const countQuery = `SELECT COUNT(*) FROM businesses b JOIN categories c ON b.category_id = c.id WHERE ${whereForCount.join(' AND ')}`;
+            const countQuery = `SELECT COUNT(*) FROM businesses b LEFT JOIN categories c ON b.category_id = c.id WHERE ${whereForCount.join(' AND ')}`;
             const countResult = await pool.query(countQuery, whereParams);
             const total = parseInt(countResult.rows[0].count);
 
@@ -576,7 +576,7 @@ router.get('/businesses/:slug', async (req, res) => {
                          JOIN categories cx ON cx.id = bcx.category_id
                          WHERE bcx.business_id = b.id
                        ) AS categories
-                FROM businesses b JOIN categories c ON b.category_id = c.id
+                FROM businesses b LEFT JOIN categories c ON b.category_id = c.id
                 WHERE b.slug = $1 AND b.is_active = TRUE`;
             let result = await pool.query(BIZ_QUERY, [slug]);
             if (result.rows.length === 0) {
