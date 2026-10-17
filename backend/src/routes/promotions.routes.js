@@ -35,8 +35,8 @@ async function getBoostConfig() {
     r.rows.forEach(row => { cfg[row.key] = row.value; });
     // Descripciones por defecto (orientadas a conversión) — editables desde el admin
     const DEF_DESC = {
-        boost_7d:  'Tu promo aparece destacada en su categoría durante 7 días. Ideal para probar y dar un empujón rápido.',
-        boost_15d: 'El doble de tiempo destacada en tu categoría. Más días visible = más clientes que te encuentran.',
+        boost_7d:  'Tu promo aparece destacada en su rubro durante 7 días. Ideal para probar y dar un empujón rápido.',
+        boost_15d: 'El doble de tiempo destacada en tu rubro. Más días visible = más clientes que te encuentran.',
         boost_home_30d: 'Máxima exposición: tu promo aparece en la portada de RetoPA por 30 días, vista por todos los visitantes. El que más vende.',
     };
     return {

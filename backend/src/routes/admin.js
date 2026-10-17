@@ -12,6 +12,8 @@ const { buildKitBatchPdf } = require('../utils/kit-pdf');
 const { touchLastSeen } = require('../utils/presence');
 const { getNetworkStats } = require('../utils/sysnet');
 const { notifyOwner } = require('../helpers/notifyOwner');
+const { logClaimEvent } = require('../utils/claimEvents');
+const { mobilePY } = require('../helpers/claimFlow');
 
 async function invalidateBusinessCache(slug) {
     try {
@@ -108,7 +110,10 @@ router.get('/dashboard', async (req, res) => {
     const [bizCount, revCount, leadsPending, usersCount, verifiedCount, pendingVerifCount] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM businesses WHERE is_active = true'),
       pool.query('SELECT COUNT(*) FROM reviews WHERE is_approved = true'),
-      pool.query("SELECT COUNT(*) FROM service_leads WHERE status = 'pending'"),
+      // Badge de "Captación / Leads": MISMO criterio que el listado de Leads, que excluye
+      // promo_boost y claim (tienen su propia sección y badge). Antes contaba todo y un
+      // claim nuevo prendía el badge de Leads en vez del de Claims.
+      pool.query("SELECT COUNT(*) FROM service_leads WHERE status = 'pending' AND COALESCE(service_type,'') NOT IN ('promo_boost','claim')"),
       pool.query('SELECT COUNT(*) FROM users'),
       pool.query('SELECT COUNT(*) FROM businesses WHERE verified = true AND is_active = true'),
       pool.query('SELECT COUNT(*) FROM businesses WHERE (verified = false OR verified IS NULL) AND is_active = true'),
@@ -229,6 +234,23 @@ router.get('/dashboard', async (req, res) => {
         total_users: parseInt(usersCount.rows[0].count),
         total_reviews: parseInt(revCount.rows[0].count),
         pending_leads: parseInt(leadsPending.rows[0].count),
+        // Mismo criterio que las tarjetas de la sección Claims (stats.pending).
+        // + reclamos automáticos (E1) que esperan revisión. Si la columna aún no
+        // existe (migración E1 pendiente), cae al conteo de pendientes.
+        pending_claims: await pool.query(`SELECT (SELECT COUNT(*) FROM businesses
+                            WHERE claim_status = 'pending'
+                               OR (claim_status = 'approved' AND claim_method = 'token' AND claim_reviewed_at IS NULL))::int
+                          + COALESCE((SELECT COUNT(*) FROM access_requests WHERE handled_at IS NULL
+                                       AND created_at > NOW() - interval '30 days'), 0)::int
+                          + COALESCE((SELECT COUNT(*) FROM claim_requests WHERE status = 'pending'
+                                       AND created_at > NOW() - interval '30 days'), 0)::int AS n`)
+                          .then(r => r.rows[0].n)
+                          .catch(() => pool.query(`SELECT COUNT(*)::int AS n FROM businesses
+                            WHERE claim_status = 'pending'
+                               OR (claim_status = 'approved' AND claim_method = 'token' AND claim_reviewed_at IS NULL)`)
+                                         .then(r => r.rows[0].n))
+                          .catch(() => pool.query("SELECT COUNT(*)::int AS n FROM businesses WHERE claim_status = 'pending'")
+                                         .then(r => r.rows[0].n).catch(() => 0)),
         total_leads: Object.values(leadsByStatus).reduce((a, b) => a + b, 0),
         leads_contacted: leadsByStatus['contacted'] || 0,
         leads_won: (leadsByStatus['won'] || 0) + (leadsByStatus['closed'] || 0) + (leadsByStatus['completed'] || 0),
@@ -672,12 +694,12 @@ router.get('/leads', async (req, res) => {
     // "Tratado" = won/lost/closed (venta) + verificado/descartado (captación).
     // "Archivado manual" = archived=true.
     if (view === 'archived') {
-      whereClause += ` AND (sl.archived = TRUE OR sl.status IN ('won','lost','closed','verificado','descartado'))`;
+      whereClause += ` AND (sl.archived = TRUE OR sl.status IN ('won','lost','closed','verificado','descartado','fusionado'))`;
     } else if (view === 'all') {
       // sin filtro de archivado
     } else {
       // active (default): ni archivado manual ni tratado → el "backlog accionable"
-      whereClause += ` AND sl.archived = FALSE AND sl.status NOT IN ('won','lost','closed','verificado','descartado')`;
+      whereClause += ` AND sl.archived = FALSE AND sl.status NOT IN ('won','lost','closed','verificado','descartado','fusionado')`;
     }
 
     if (status) {
@@ -746,6 +768,8 @@ router.get('/leads', async (req, res) => {
         b.email     AS business_email,
         b.verified  AS business_verified,
         b.plan_type AS business_plan_type,
+        b.merged_into AS business_merged_into,
+        EXISTS (SELECT 1 FROM user_businesses ubo WHERE ubo.business_id = b.id AND ubo.is_owner) AS business_has_owner,
         -- Categoría de la empresa
         c.id        AS category_id,
         c.name      AS category_name,
@@ -834,15 +858,45 @@ router.post('/leads/:id/verify-ficha', async (req, res) => {
     if (out.error === 'NO_BUSINESS') { await client.query('ROLLBACK'); return res.status(400).json({ success: false, error: 'Este registro no tiene una ficha de empresa vinculada' }); }
     await client.query('COMMIT');
 
-    // Post-commit: invalidar cachés del directorio y disparar correo de verificación
+    // Post-commit: invalidar cachés del directorio y mandar el correo de verificación
+    // (ahora con dueño asignado, le llega a SU correo).
     try { const keys = await redisClient.keys('dir:*'); if (keys.length) await redisClient.del(keys); } catch (e) {}
-    if (out.didVerify) notifyBusinessVerified(out.bizId); // fire & forget: sólo en la transición
+    const mail = out.didVerify ? await notifyBusinessVerified(out.bizId) : null;
+
+    // Aviso opcional por WhatsApp con su link de acceso (estos dueños casi nunca entran).
+    let notify = null;
+    try {
+      const o = (await pool.query(
+        `SELECT u.id, u.name, u.email, u.phone, b.slug, b.whatsapp, b.phone AS biz_phone,
+                COALESCE(NULLIF(b.trade_name,''), b.name) AS business
+           FROM businesses b
+           JOIN user_businesses ub ON ub.business_id = b.id AND ub.is_owner
+           JOIN users u ON u.id = ub.user_id
+          WHERE b.id = $1 ORDER BY ub.id LIMIT 1`, [out.bizId])).rows[0];
+      if (o) {
+        const { siteName, siteUrl } = await siteInfo();
+        const accessUrl = await mintAccessLink(o.id, siteUrl);
+        // En las altas viejas el "nombre" suele ser el del negocio ("El Empanadero"):
+        // ahí no saludamos por nombre (evita "¡Hola El!").
+        const fn = firstName(o.name);
+        const isBizName = String(o.name || '').trim().toLowerCase() === String(o.business || '').trim().toLowerCase();
+        const hola = (fn && !isBizName && !/^(el|la|los|las|don|doña)$/i.test(fn)) ? `¡Hola ${fn}!` : '¡Hola!';
+        notify = {
+          wa: mobilePY(o.phone) || mobilePY(o.whatsapp) || mobilePY(o.biz_phone),
+          email: (mail && mail.to) || o.email || null, emailed: !!(mail && mail.ok),
+          message: `${hola} ${o.business} ya está verificado en ${siteName}.\nMirá tu ficha: ${siteUrl}/negocio/${o.slug}` +
+                   (accessUrl ? `\nPara entrar a tu panel y completarla: ${accessUrl}\n(vale 7 días y un solo uso)` : ''),
+        };
+      }
+    } catch (e) { console.warn('[verify-ficha] aviso:', e.message); }
 
     res.json({
       success: true,
       verified: true,
       did_verify: out.didVerify,
       opportunity_created: out.opportunityCreated,
+      owner_linked: out.ownerLinked || null,
+      notify,
       message: out.opportunityCreated
         ? 'Ficha verificada. Se creó una oportunidad de onboarding sin asignar.'
         : 'Ficha verificada. Ya existía una oportunidad de onboarding activa para esta empresa.'
@@ -1349,7 +1403,7 @@ router.post('/businesses/bulk-category', async (req, res) => {
       'SELECT id, name, parent_id FROM categories WHERE id=$1', [category_id]
     );
     if (!catCheck.rows.length)
-      return res.status(404).json({ success: false, error: 'Categoría no encontrada' });
+      return res.status(404).json({ success: false, error: 'Rubro no encontrado' });
 
     const ids = business_ids.map(n => parseInt(n)).filter(Number.isFinite);
     await pool.query(
@@ -1581,6 +1635,18 @@ router.delete('/businesses/:id/delegate/:userId', async (req, res) => {
 // D7.5 — Al verificar una empresa (transición NO-verificada → verificada) se
 // manda la plantilla 'verified' al dueño y se registra en Logs de correos.
 // Fire & forget; idempotente (solo en la transición, no re-envía si ya estaba).
+// Verificar desde Empresas (no desde el Lead) también asigna el dueño a quien
+// registró la ficha, si no tiene (misma regla y fuentes que verify-ficha).
+async function ensureRegistrantOwner(businessId) {
+  try {
+    const l = await pool.query(
+      `SELECT id FROM service_leads WHERE business_id = $1 AND COALESCE(service_type,'') NOT IN ('claim','promo_boost')
+        ORDER BY created_at DESC LIMIT 1`, [businessId]);
+    if (l.rows.length) return await require('../helpers/verifyFicha').linkRegistrantOwner(pool, businessId, l.rows[0].id);
+  } catch (e) { console.warn('[ensureRegistrantOwner]', e.message); }
+  return null;
+}
+
 async function notifyBusinessVerified(businessId) {
   try {
     const q = await pool.query(`
@@ -1590,7 +1656,7 @@ async function notifyBusinessVerified(businessId) {
       FROM businesses b WHERE b.id=$1`, [businessId]);
     const b = q.rows[0]; if (!b) return;
     const to = b.owner_email || b.biz_email;
-    if (!to) { console.log(`[verified email] biz ${businessId} sin email de destino`); return; }
+    if (!to) { console.log(`[verified email] biz ${businessId} sin email de destino`); return null; }
     const cfg = await getSiteConfigAll();
     const siteName = cfg.site_name || 'RetoPA';
     const siteUrl  = (cfg.site_url || 'https://retopa.com.py').replace(/\/$/, '');
@@ -1601,7 +1667,8 @@ async function notifyBusinessVerified(businessId) {
       siteName, siteUrl,
     });
     // El log de email_log ya lo hace sendEmail() de forma centralizada (type='verified').
-  } catch (e) { console.error('[notifyBusinessVerified]', e.message); }
+    return { to, ok: !!(r && r.success !== false) };
+  } catch (e) { console.error('[notifyBusinessVerified]', e.message); return null; }
 }
 
 // ── PATCH /businesses/:id/verify ── Solo cambia verified ─────────────────
@@ -1615,7 +1682,7 @@ router.patch('/businesses/:id/verify', async (req, res) => {
       [v, id]
     );
     try { await redisClient.del(`dir:biz:*`); const keys = await redisClient.keys('dir:*'); if (keys.length) await redisClient.del(keys); } catch(e) {}
-    if (upd.rowCount && v) notifyBusinessVerified(id); // fire & forget: solo en la transición a verificada
+    if (upd.rowCount && v) ensureRegistrantOwner(id).finally(() => notifyBusinessVerified(id)); // solo en la transición a verificada
     res.json({ success: true });
   } catch(err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1646,7 +1713,7 @@ router.put('/businesses/:id', async (req, res) => {
       if (catIds.length > limits.max_categories) {
         return res.status(400).json({
           success: false,
-          error: `El plan ${planRow.plan_type} permite hasta ${limits.max_categories} categoría(s); enviaste ${catIds.length}`,
+          error: `El plan ${planRow.plan_type} permite hasta ${limits.max_categories} rubro(s); enviaste ${catIds.length}`,
           code: 'CATEGORY_LIMIT_EXCEEDED'
         });
       }
@@ -1715,7 +1782,7 @@ router.put('/businesses/:id', async (req, res) => {
     try { await redisClient.del('dir:categories:all'); } catch(e) {}
 
     // D7.5 — si esta edición verificó la empresa (false → true), avisar+loguear.
-    if (result.rows[0].verified === true && !prevVerified) notifyBusinessVerified(parseInt(req.params.id));
+    if (result.rows[0].verified === true && !prevVerified) { const bid = parseInt(req.params.id); ensureRegistrantOwner(bid).finally(() => notifyBusinessVerified(bid)); }
 
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {
@@ -1734,7 +1801,7 @@ router.post('/businesses/:id/verify', async (req, res) => {
     if (!prev.rows.length) return res.status(404).json({ success: false, error: 'Not found' });
     const wasVerified = prev.rows[0].verified === true;
     const result = await pool.query('UPDATE businesses SET verified=true, updated_at=NOW() WHERE id=$1 RETURNING *', [id]);
-    if (!wasVerified) notifyBusinessVerified(id); // solo si venía sin verificar
+    if (!wasVerified) ensureRegistrantOwner(id).finally(() => notifyBusinessVerified(id)); // solo si venía sin verificar
     res.json({ success: true, data: result.rows[0], message: 'Negocio verificado' });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
@@ -1855,11 +1922,33 @@ router.delete('/businesses/:id', async (req, res) => {
 // ============================================
 router.get('/users', async (req, res) => {
   try {
-    const { page = 1, limit = 25, q, role, is_active, inactive_days } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { q, role, is_active, inactive_days } = req.query;
+    // Paginado: acepta ?page=N o ?offset=M (el panel mandaba offset y acá se
+    // ignoraba → siempre la página 1). limit acotado a 1..100.
+    const limNum = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
+    let pageNum = parseInt(req.query.page, 10);
+    if (!Number.isFinite(pageNum) || pageNum < 1) {
+      const off = parseInt(req.query.offset, 10);
+      pageNum = Number.isFinite(off) && off > 0 ? Math.floor(off / limNum) + 1 : 1;
+    }
+    const offset = (pageNum - 1) * limNum;
     // Filtros (sobre columnas de u) → sirven para el count y para la data.
     const conds = ['1=1']; const params = []; let idx = 1;
-    if (q)    { conds.push(`(u.name ILIKE $${idx} OR u.email ILIKE $${idx})`); params.push(`%${q}%`); idx++; }
+    if (q && String(q).trim()) {
+      // Nombre, correo, negocio del que es dueño y — si hay 6+ dígitos — su WhatsApp.
+      const qs = String(q).trim();
+      const digits = qs.replace(/\D/g, '');
+      let c = `(u.name ILIKE $${idx} OR u.email ILIKE $${idx} OR EXISTS (
+                 SELECT 1 FROM user_businesses ubq JOIN businesses bq ON bq.id = ubq.business_id
+                  WHERE ubq.user_id = u.id AND (bq.name ILIKE $${idx} OR bq.trade_name ILIKE $${idx}))`;
+      params.push(`%${qs}%`); idx++;
+      if (digits.length >= 6) {
+        // últimos 9 dígitos (sin 595 / 0 inicial) contra el teléfono en dígitos
+        c += ` OR regexp_replace(COALESCE(u.phone,''), '\\D', '', 'g') LIKE $${idx}`;
+        params.push(`%${digits.replace(/^(595|0)/, '')}%`); idx++;
+      }
+      conds.push(c + ')');
+    }
     if (role) { conds.push(`u.role = $${idx++}`); params.push(role); }
     if (is_active !== undefined && is_active !== '') { conds.push(`u.is_active = $${idx++}`); params.push(is_active === 'true'); }
     // "Sin acceso": inactivos hace +N días (incluye a los que NUNCA entraron → last_seen NULL).
@@ -1883,18 +1972,36 @@ router.get('/users', async (req, res) => {
              COUNT(*) FILTER (WHERE role='godmode')::int AS godmode
       FROM users`);
 
-    const dataParams = [...params, parseInt(limit), offset];
+    const dataParams = [...params, limNum, offset];
     const result = await pool.query(`
-      SELECT u.id, u.name, u.email, u.phone, u.city, u.role, u.is_active, u.created_at, u.last_seen_at,
-             COUNT(ub.business_id) as business_count,
+      SELECT u.*,
+             (SELECT COUNT(*) FROM user_businesses ub WHERE ub.user_id = u.id)::int AS business_count,
              (SELECT b.slug FROM user_businesses ub2 JOIN businesses b ON b.id = ub2.business_id
-               WHERE ub2.user_id = u.id AND ub2.is_owner = TRUE ORDER BY ub2.business_id LIMIT 1) AS owned_slug
-      FROM users u LEFT JOIN user_businesses ub ON ub.user_id = u.id
+               WHERE ub2.user_id = u.id AND ub2.is_owner = TRUE ORDER BY ub2.business_id LIMIT 1) AS owned_slug,
+             (SELECT COALESCE(NULLIF(b.trade_name,''), b.name) FROM user_businesses ub3 JOIN businesses b ON b.id = ub3.business_id
+               WHERE ub3.user_id = u.id AND ub3.is_owner = TRUE ORDER BY ub3.business_id LIMIT 1) AS owned_name,
+             (SELECT b.id FROM user_businesses ub4 JOIN businesses b ON b.id = ub4.business_id
+               WHERE ub4.user_id = u.id AND ub4.is_owner = TRUE ORDER BY ub4.business_id LIMIT 1) AS owned_id,
+             (SELECT COALESCE(NULLIF(b.whatsapp,''), b.phone) FROM user_businesses ub5 JOIN businesses b ON b.id = ub5.business_id
+               WHERE ub5.user_id = u.id AND ub5.is_owner = TRUE ORDER BY ub5.business_id LIMIT 1) AS owned_contact
+      FROM users u
       ${whereSql}
-      GROUP BY u.id, u.name, u.email, u.phone, u.city, u.role, u.is_active, u.created_at, u.last_seen_at
-      ORDER BY u.created_at DESC LIMIT $${idx++} OFFSET $${idx++}
+      ORDER BY u.created_at DESC, u.id DESC LIMIT $${idx++} OFFSET $${idx++}
     `, dataParams);
-    res.json({ success: true, data: result.rows, stats: statsRes.rows[0], pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total/parseInt(limit)) } });
+    // Solo lo que el panel necesita (nunca hashes ni tokens).
+    const data = result.rows.map(u => ({
+      id: u.id, name: u.name, email: u.email, phone: u.phone, wa: mobilePY(u.phone), city: u.city, role: u.role,
+      is_active: u.is_active, created_at: u.created_at, last_seen_at: u.last_seen_at,
+      business_count: u.business_count, owned_slug: u.owned_slug, owned_name: u.owned_name, owned_id: u.owned_id,
+      // WhatsApp de la FICHA (no del usuario): solo como referencia, con su fuente.
+      owned_wa: mobilePY(u.owned_contact),
+      has_password: u.password_set_at === undefined ? true : !!u.password_set_at,
+      // De un vistazo: ¿confirmó el correo? ¿el WhatsApp está probado (vino del número de su ficha)?
+      email_verified: !!u.email_verified,
+      phone_verified: !!u.phone_verified_at,
+    }));
+    res.json({ success: true, data, stats: statsRes.rows[0],
+      pagination: { total, page: pageNum, limit: limNum, pages: Math.max(Math.ceil(total / limNum), 1) } });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
@@ -1993,20 +2100,117 @@ router.post('/users', async (req, res) => {
     if (password.length < 8) return res.status(400).json({ success: false, error: 'La contraseña debe tener al menos 8 caracteres' });
     const validRoles = ['user','client','admin','godmode'];
     if (!validRoles.includes(role)) return res.status(400).json({ success: false, error: 'Rol inválido' });
+    if (role === 'godmode' && (req.user || {}).role !== 'godmode') return res.status(400).json({ success: false, error: 'Solo GodMode puede crear usuarios GodMode' });
     const exists = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (exists.rows.length > 0) return res.status(409).json({ success: false, error: 'El email ya está registrado' });
     const hash = await bcrypt.hash(password, 10);
     const result = await pool.query(
       'INSERT INTO users (email, password_hash, name, phone, role, is_active) VALUES ($1,$2,$3,$4,$5,TRUE) RETURNING id, email, name, role, created_at',
-      [email.toLowerCase(), hash, name, phone||null, role]
+      [email.toLowerCase(), hash, name, (mobilePY(phone) ? '+' + mobilePY(phone) : (phone || null)), role]
     );
+    pool.query('UPDATE users SET password_set_at = NOW() WHERE id = $1', [result.rows[0].id]).catch(() => {});
     res.json({ success: true, data: result.rows[0], message: 'Usuario creado correctamente' });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// ── Guardas para cambios sobre usuarios (2026-10-13) ─────────────────────────
+//  · Solo GodMode puede dar o quitar GodMode (o tocar a un GodMode).
+//  · Nadie se cambia su propio rol, ni se desactiva ni se borra a sí mismo.
+const USER_ROLES = ['user', 'client', 'admin', 'godmode'];
+async function guardUserChange(req, targetId, { role, deactivate, deleting } = {}) {
+  const t = await pool.query('SELECT id, role FROM users WHERE id = $1', [targetId]);
+  if (!t.rows.length) return { status: 404, error: 'Usuario no encontrado' };
+  const target = t.rows[0];
+  const actor = req.user || {};
+  const self = String(actor.id) === String(target.id);
+  if (role !== undefined && !USER_ROLES.includes(role)) return { status: 400, error: 'Rol inválido' };
+  if (self && role !== undefined && role !== target.role) return { status: 400, error: 'No podés cambiar tu propio rol' };
+  if (self && deactivate) return { status: 400, error: 'No podés desactivarte a vos mismo' };
+  if (self && deleting) return { status: 400, error: 'No podés eliminar tu propio usuario' };
+  const touchesGod = target.role === 'godmode' || role === 'godmode';
+  // 400 (no 403): el panel trata 401/403 como "sesión vencida" y cierra sesión.
+  if (touchesGod && actor.role !== 'godmode') return { status: 400, error: 'Solo GodMode puede modificar usuarios GodMode' };
+  return { target };
+}
+
+// ── GET /admin/users/:id/contact-suggestions ── ¿de dónde sacar su WhatsApp? ──
+// Muchos dueños dejaron su número en la FICHA o en el formulario de reclamo/alta,
+// pero no en su usuario. Se devuelven como SUGERENCIAS CON FUENTE (el admin elige
+// y guarda); nunca se copian solos.
+router.get('/users/:id/contact-suggestions', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'id inválido' });
+  try {
+    const u = (await pool.query('SELECT id, email, phone FROM users WHERE id = $1', [id])).rows[0];
+    if (!u) return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
+    const out = []; const seen = new Set([mobilePY(u.phone)].filter(Boolean));
+    const add = (raw, source, at) => { const wa = mobilePY(raw); if (wa && !seen.has(wa)) { seen.add(wa); out.push({ wa, source, at: at || null }); } };
+    const biz = await pool.query(`
+      SELECT COALESCE(NULLIF(b.trade_name,''), b.name) AS nombre, b.whatsapp, b.phone
+        FROM user_businesses ub JOIN businesses b ON b.id = ub.business_id
+       WHERE ub.user_id = $1 ORDER BY ub.is_owner DESC, ub.business_id`, [id]);
+    for (const b of biz.rows) { add(b.whatsapp, `WhatsApp de la ficha «${b.nombre}»`); add(b.phone, `Teléfono de la ficha «${b.nombre}»`); }
+    const leads = await pool.query(`
+      SELECT sl.contact_phone, sl.service_type, sl.created_at
+        FROM service_leads sl
+       WHERE sl.contact_phone IS NOT NULL
+         AND ((sl.contact_email IS NOT NULL AND $2::text IS NOT NULL AND lower(sl.contact_email) = lower($2))
+              OR sl.business_id IN (SELECT business_id FROM user_businesses WHERE user_id = $1 AND is_owner))
+       ORDER BY sl.created_at DESC LIMIT 10`, [id, u.email]);
+    const KIND = { claim: 'reclamo', basic: 'alta', featured: 'alta', premium: 'alta' };
+    for (const l of leads.rows) add(l.contact_phone, `Lo dejó en el formulario de ${KIND[l.service_type] || 'contacto'}`, l.created_at);
+    res.json({ success: true, data: out });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// ── PUT /admin/users/:id ── edición completa desde el modal ─────────────────
+// { name, email (opcional), phone (WhatsApp PY, opcional), role, is_active, password? }
+router.put('/users/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'id inválido' });
+  try {
+    const b = req.body || {};
+    const g = await guardUserChange(req, id, { role: b.role, deactivate: b.is_active === false });
+    if (g.error) return res.status(g.status).json({ success: false, error: g.error });
+
+    const name = String(b.name == null ? '' : b.name).trim().replace(/\s+/g, ' ');
+    if (!name) return res.status(400).json({ success: false, error: 'El nombre es obligatorio', field: 'name' });
+    const email = String(b.email == null ? '' : b.email).trim().toLowerCase();
+    if (email && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) return res.status(400).json({ success: false, error: 'Correo inválido', field: 'email' });
+    if (email) {
+      const dup = await pool.query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [email, id]);
+      if (dup.rows.length) return res.status(409).json({ success: false, error: 'Ese correo ya lo usa otra cuenta', field: 'email' });
+    }
+    const rawPhone = String(b.phone == null ? '' : b.phone).trim();
+    let phone = null;
+    if (rawPhone) {
+      const wa = mobilePY(rawPhone);
+      if (!wa) return res.status(400).json({ success: false, error: 'WhatsApp inválido (ej: 981 123 456)', field: 'phone' });
+      phone = '+' + wa;
+    }
+    if (!email && !phone) return res.status(400).json({ success: false, error: 'Dejá al menos un correo o un WhatsApp para que pueda entrar', field: 'email' });
+    const password = String(b.password || '');
+    if (password && password.length < 8) return res.status(400).json({ success: false, error: 'La contraseña debe tener al menos 8 caracteres', field: 'password' });
+
+    const sets = ['name = $2', 'email = $3', 'phone = $4', 'updated_at = NOW()'];
+    const params = [id, name, email || null, phone];
+    if (b.role !== undefined) { params.push(b.role); sets.push(`role = $${params.length}`); }
+    if (typeof b.is_active === 'boolean') { params.push(b.is_active); sets.push(`is_active = $${params.length}`); }
+    if (password) {
+      params.push(await bcrypt.hash(password, 10)); sets.push(`password_hash = $${params.length}`);
+      const hasCol = await pool.query("SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='password_set_at'");
+      if (hasCol.rows.length) sets.push('password_set_at = NOW()');
+    }
+    const r = await pool.query(`UPDATE users SET ${sets.join(', ')} WHERE id = $1 RETURNING id, name, email, phone, role, is_active`, params);
+    res.json({ success: true, data: r.rows[0], message: 'Usuario actualizado' });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 router.put('/users/:id/role', async (req, res) => {
   try {
     const { role } = req.body;
+    const g = await guardUserChange(req, req.params.id, { role });
+    if (g.error) return res.status(g.status).json({ success: false, error: g.error });
     const result = await pool.query('UPDATE users SET role=$1, updated_at=NOW() WHERE id=$2 RETURNING id, name, email, role', [role, req.params.id]);
     if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Not found' });
     res.json({ success: true, data: result.rows[0], message: `Rol actualizado` });
@@ -2043,6 +2247,8 @@ router.delete('/users/:id/businesses/:bizId', async (req, res) => {
 router.put('/users/:id/status', async (req, res) => {
   try {
     const isActive = req.body.is_active !== undefined ? req.body.is_active : req.body.active;
+    const g = await guardUserChange(req, req.params.id, { deactivate: isActive === false || isActive === 'false' });
+    if (g.error) return res.status(g.status).json({ success: false, error: g.error });
     const result = await pool.query('UPDATE users SET is_active=$1, updated_at=NOW() WHERE id=$2 RETURNING id, name, email, is_active', [isActive, req.params.id]);
     if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Not found' });
     res.json({ success: true, data: result.rows[0], message: `Usuario ${isActive ? 'activado' : 'desactivado'}` });
@@ -2051,6 +2257,8 @@ router.put('/users/:id/status', async (req, res) => {
 
 router.delete('/users/:id', async (req, res) => {
   try {
+    const g = await guardUserChange(req, req.params.id, { deleting: true });
+    if (g.error) return res.status(g.status).json({ success: false, error: g.error });
     // Desvincular empresas del usuario antes de eliminar
     await pool.query('DELETE FROM user_businesses WHERE user_id=$1', [req.params.id]);
     const result = await pool.query('DELETE FROM users WHERE id=$1 RETURNING id, name, email', [req.params.id]);
@@ -2086,8 +2294,8 @@ router.post('/categories', async (req, res) => {
     // Validar que el padre, si se pasa, no sea a su vez un hijo (solo 2 niveles)
     if (parent_id) {
       const p = await pool.query('SELECT id, parent_id FROM categories WHERE id = $1', [parent_id]);
-      if (!p.rows.length) return res.status(400).json({ success: false, error: 'Categoría padre no encontrada' });
-      if (p.rows[0].parent_id) return res.status(400).json({ success: false, error: 'La categoría padre no puede ser a su vez una subcategoría (solo 2 niveles)' });
+      if (!p.rows.length) return res.status(400).json({ success: false, error: 'Rubro padre no encontrado' });
+      if (p.rows[0].parent_id) return res.status(400).json({ success: false, error: 'El rubro padre no puede ser a su vez un subrubro (solo 2 niveles)' });
     }
     const result = await pool.query(
       'INSERT INTO categories (name, slug, icon, color, bg_color, display_order, parent_id) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
@@ -2096,7 +2304,7 @@ router.post('/categories', async (req, res) => {
     try { await redisClient.del('dir:categories:all'); } catch(e) {}
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {
-    if (err.code === '23505') return res.status(400).json({ success: false, error: 'Ya existe una categoría con ese slug' });
+    if (err.code === '23505') return res.status(400).json({ success: false, error: 'Ya existe un rubro con ese slug' });
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -2107,15 +2315,15 @@ router.put('/categories/:id', async (req, res) => {
     const catId = parseInt(req.params.id);
     // No puede ser padre de sí mismo
     if (parent_id && parseInt(parent_id) === catId) {
-      return res.status(400).json({ success: false, error: 'Una categoría no puede ser su propio padre' });
+      return res.status(400).json({ success: false, error: 'Un rubro no puede ser su propio padre' });
     }
     if (parent_id) {
       const p = await pool.query('SELECT id, parent_id FROM categories WHERE id = $1', [parent_id]);
-      if (!p.rows.length) return res.status(400).json({ success: false, error: 'Categoría padre no encontrada' });
-      if (p.rows[0].parent_id) return res.status(400).json({ success: false, error: 'La categoría padre no puede ser a su vez una subcategoría (solo 2 niveles)' });
+      if (!p.rows.length) return res.status(400).json({ success: false, error: 'Rubro padre no encontrado' });
+      if (p.rows[0].parent_id) return res.status(400).json({ success: false, error: 'El rubro padre no puede ser a su vez un subrubro (solo 2 niveles)' });
       // Si esta categoría tiene hijos, no puede pasar a ser hija (rompería los 2 niveles)
       const k = await pool.query('SELECT COUNT(*)::int AS n FROM categories WHERE parent_id = $1', [catId]);
-      if (k.rows[0].n > 0) return res.status(400).json({ success: false, error: 'Esta categoría tiene subcategorías; quitalas antes de moverla' });
+      if (k.rows[0].n > 0) return res.status(400).json({ success: false, error: 'Este rubro tiene subrubros; quitalos antes de moverlo' });
     }
     const result = await pool.query(
       'UPDATE categories SET name=$1, slug=$2, icon=$3, color=$4, bg_color=$5, display_order=$6, parent_id=$7 WHERE id=$8 RETURNING *',
@@ -2131,11 +2339,11 @@ router.delete('/categories/:id', async (req, res) => {
   try {
     const catId = parseInt(req.params.id);
     const bizCheck = await pool.query('SELECT COUNT(*) FROM business_categories WHERE category_id=$1', [catId]);
-    if (parseInt(bizCheck.rows[0].count) > 0) return res.status(400).json({ success: false, error: `No se puede eliminar: ${bizCheck.rows[0].count} negocios usan esta categoría` });
+    if (parseInt(bizCheck.rows[0].count) > 0) return res.status(400).json({ success: false, error: `No se puede eliminar: ${bizCheck.rows[0].count} negocios usan este rubro` });
     const result = await pool.query('DELETE FROM categories WHERE id=$1', [catId]);
     if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Not found' });
     try { await redisClient.del('dir:categories:all'); } catch(e) {}
-    res.json({ success: true, message: 'Categoría eliminada' });
+    res.json({ success: true, message: 'Rubro eliminado' });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
@@ -2160,7 +2368,7 @@ router.get('/plans', async (req, res) => {
     } catch(e) {
       // Tabla no existe aún — fallback hardcoded
       plans = [
-        { id: 'basic',    name: 'Básico',    subtitle: '', price: 0,      is_featured: false, button_label: 'Registrar gratis', features: ['Perfil básico','1 categoría'], businesses: countMap['basic']    || 0 },
+        { id: 'basic',    name: 'Básico',    subtitle: '', price: 0,      is_featured: false, button_label: 'Registrar gratis', features: ['Perfil básico','1 rubro'], businesses: countMap['basic']    || 0 },
         { id: 'featured', name: 'Destacado', subtitle: '', price: 50000,  is_featured: true,  button_label: 'Empezar ahora',    features: ['Perfil completo','Destacado'],   businesses: countMap['featured'] || 0 },
         { id: 'premium',  name: 'Pro',       subtitle: '', price: 100000, is_featured: false, button_label: 'Contactar ventas', features: ['Todo incluido'],                businesses: countMap['premium']  || 0 },
       ];
@@ -2668,7 +2876,9 @@ router.get('/claims', async (req, res) => {
     const offset = (Math.max(parseInt(page) || 1, 1) - 1) * lim;
 
     const conds = ['b.claim_status IS NOT NULL']; const params = []; let idx = 1;
-    if (status && ['pending', 'approved', 'rejected'].includes(status)) {
+    if (status === 'review') {
+      conds.push(`b.claim_status = 'approved' AND b.claim_method = 'token' AND b.claim_reviewed_at IS NULL`);
+    } else if (status && ['pending', 'approved', 'rejected'].includes(status)) {
       conds.push(`b.claim_status = $${idx++}`); params.push(status);
     }
     if (q && String(q).trim()) {
@@ -2683,7 +2893,9 @@ router.get('/claims', async (req, res) => {
       pool.query(`SELECT COUNT(*)::int AS total,
                          COUNT(*) FILTER (WHERE claim_status='pending')::int  AS pending,
                          COUNT(*) FILTER (WHERE claim_status='approved')::int AS approved,
-                         COUNT(*) FILTER (WHERE claim_status='rejected')::int AS rejected
+                         COUNT(*) FILTER (WHERE claim_status='rejected')::int AS rejected,
+                         COUNT(*) FILTER (WHERE claim_status='approved' AND claim_method='token'
+                                            AND claim_reviewed_at IS NULL)::int AS to_review
                   FROM businesses WHERE claim_status IS NOT NULL`),
     ]);
     const total = countRes.rows[0].n;
@@ -2692,7 +2904,14 @@ router.get('/claims', async (req, res) => {
       SELECT b.id, b.name, b.trade_name, b.slug, b.email, b.phone,
              b.city, b.department, b.claim_status, b.claimed_at,
              b.claim_token_at, b.notify_count, b.notified_at,
+             b.claim_method, b.claim_reviewed_at, b.whatsapp,
              u.id AS user_id, u.name AS user_name, u.email AS user_email,
+             u.phone AS user_phone, u.phone_verified_at AS user_phone_verified_at,
+             (SELECT COALESCE(json_agg(json_build_object('id', r.id, 'field', r.field,
+                       'old_value', r.old_value, 'new_value', r.new_value, 'created_at', r.created_at)
+                       ORDER BY r.id), '[]'::json)
+                FROM owner_change_requests r
+               WHERE r.business_id = b.id AND r.status = 'pending') AS change_requests,
              sl.contact_name  AS lead_contact_name,
              sl.contact_email AS lead_contact_email,
              sl.contact_phone AS lead_contact_phone,
@@ -2707,7 +2926,9 @@ router.get('/claims', async (req, res) => {
       ) sl ON TRUE
       ${whereSql}
       ORDER BY
-        CASE b.claim_status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+        CASE WHEN b.claim_status = 'pending' THEN 0
+             WHEN b.claim_status = 'approved' AND b.claim_method = 'token' AND b.claim_reviewed_at IS NULL THEN 1
+             WHEN b.claim_status = 'approved' THEN 2 ELSE 3 END,
         b.claimed_at DESC NULLS LAST
       LIMIT $${idx++} OFFSET $${idx++}
     `, [...params, lim, offset]);
@@ -2719,11 +2940,13 @@ router.get('/claims', async (req, res) => {
       const { lead_notes, ...rest } = r;
       return {
         ...rest,
-        origin: r.user_id ? 'cuenta' : 'formulario',
+        origin: r.claim_method === 'token' ? 'enlace' : (r.user_id ? 'cuenta' : 'formulario'),
+        to_review: r.claim_status === 'approved' && r.claim_method === 'token' && !r.claim_reviewed_at,
+        wa: mobilePY(r.user_phone) || mobilePY(r.whatsapp),
         message, evidence_url,
         contact_name:  r.user_name  || r.lead_contact_name  || null,
         contact_email: r.user_email || r.lead_contact_email || r.email || null,
-        contact_phone: r.lead_contact_phone || r.phone || null,
+        contact_phone: r.user_phone || r.lead_contact_phone || r.phone || null,
       };
     });
     res.json({
@@ -2762,6 +2985,396 @@ async function emailClaimAccess(biz, info, contactName, activationToken) {
 
 // APROBAR un claim: verifica la ficha Y provisiona el acceso del dueño
 // (crea/vincula cuenta + envía activación si es nueva). Todo transaccional.
+// ── GET /admin/claims/funnel?days=7|30|90 ── Embudo de reclamo (solo lectura) ──
+// Fuente: claim_events (ver utils/claimEvents.js + sql/2026-10-12_claim_events.sql).
+// Devuelve: activación de cuentas (90 d), embudo por origen, motivos de freno y
+// "abrieron y no terminaron" (para recontactar por WhatsApp). Si la migración no
+// corrió, responde ready:false sin romper la sección Claims.
+function _waMobilePY(...vals) {
+  for (const v of vals) {
+    const d = String(v || '').replace(/\D/g, '');
+    const m = d.match(/^(?:595|0)?(9\d{8})$/);
+    if (m) return '595' + m[1];
+  }
+  return null;
+}
+router.get('/claims/funnel', async (req, res) => {
+  const days = [7, 30, 90].includes(parseInt(req.query.days, 10)) ? parseInt(req.query.days, 10) : 30;
+  try {
+    const ready = await pool.query("SELECT to_regclass('public.claim_events') IS NOT NULL AS ok");
+    if (!ready.rows[0].ok) return res.json({ success: true, ready: false, days });
+
+    const [act, emb, motivos, aband, cfg] = await Promise.all([
+      pool.query('SELECT * FROM v_duenos_activacion').catch(() => ({ rows: [] })),
+      pool.query(`
+        WITH e AS (
+          SELECT * FROM claim_events WHERE created_at > now() - make_interval(days => $1)
+        ), origen AS (
+          SELECT DISTINCT ON (business_id) business_id, source
+            FROM claim_events
+           WHERE event = 'link_opened' AND business_id IS NOT NULL AND source IS NOT NULL
+           ORDER BY business_id, created_at
+        ), x AS (
+          SELECT e.*, COALESCE(o.source, e.source,
+                   CASE WHEN e.canal = 'ficha' THEN 'boton_ficha' ELSE '(sin origen)' END) AS origen
+            FROM e LEFT JOIN origen o ON o.business_id = e.business_id
+        )
+        SELECT origen IS NULL AS es_total, COALESCE(origen, 'TOTAL') AS origen,
+               count(DISTINCT visit)       FILTER (WHERE event = 'link_opened')::int                    AS visitas,
+               count(DISTINCT business_id) FILTER (WHERE event = 'link_opened')::int                    AS fichas_vistas,
+               count(*)                    FILTER (WHERE event IN ('link_invalid','link_expired'))::int AS links_muertos,
+               count(DISTINCT business_id) FILTER (WHERE event = 'form_started')::int                   AS iniciaron_form,
+               count(DISTINCT business_id) FILTER (WHERE event = 'form_error')::int                     AS frenados_validacion,
+               count(DISTINCT business_id) FILTER (WHERE event = 'submit_ok')::int                      AS enviaron,
+               count(DISTINCT business_id) FILTER (WHERE event IN ('approved','access_granted','auto_approved'))::int AS aprobados,
+               count(DISTINCT business_id) FILTER (WHERE event = 'not_mine')::int                      AS no_es_suyo,
+               count(DISTINCT business_id) FILTER (
+                 WHERE event IN ('submit_ok','approved','access_granted','auto_approved') AND EXISTS (
+                   SELECT 1 FROM user_businesses ub JOIN users u ON u.id = ub.user_id
+                    WHERE ub.business_id = x.business_id AND ub.is_owner
+                      AND u.last_seen_at >= x.created_at))::int                                           AS dueno_entro
+          FROM x GROUP BY ROLLUP (origen)`, [days]),
+      pool.query(`
+        SELECT reason, count(*)::int AS n FROM claim_events
+         WHERE event IN ('form_error','submit_error') AND reason IS NOT NULL
+           AND created_at > now() - make_interval(days => $1)
+         GROUP BY 1 ORDER BY 2 DESC`, [days]),
+      pool.query(`
+        SELECT b.id, COALESCE(NULLIF(b.trade_name,''), b.name) AS nombre, b.slug, b.city,
+               b.whatsapp, b.phone, b.claim_token, b.claim_expires_at,
+               a.primera, a.ultima, a.visitas, a.ultimo_paso, a.origen
+          FROM (
+            SELECT business_id,
+                   min(created_at) AS primera, max(created_at) AS ultima,
+                   count(DISTINCT visit) FILTER (WHERE event = 'link_opened')::int AS visitas,
+                   (array_agg(event ORDER BY created_at DESC))[1] AS ultimo_paso,
+                   (array_agg(source ORDER BY created_at) FILTER (WHERE source IS NOT NULL))[1] AS origen
+              FROM claim_events
+             WHERE business_id IS NOT NULL AND created_at > now() - make_interval(days => $1)
+             GROUP BY business_id
+            HAVING bool_or(event = 'link_opened')
+               AND NOT bool_or(event IN ('submit_ok','approved','access_granted','auto_approved','not_mine'))
+          ) a
+          JOIN businesses b ON b.id = a.business_id
+         WHERE COALESCE(b.claim_status, '') NOT IN ('approved','pending')
+         ORDER BY a.ultima DESC
+         LIMIT 100`, [days]),
+      pool.query("SELECT value FROM site_config WHERE key = 'site_url'").catch(() => ({ rows: [] })),
+    ]);
+
+    const site = String((cfg.rows[0] && cfg.rows[0].value) || process.env.SITE_URL || 'https://retopa.com.py').replace(/\/$/, '');
+    const embudo = emb.rows.filter(r => !r.es_total).map(({ es_total, ...r }) => r)
+      .sort((a, b) => b.fichas_vistas - a.fichas_vistas || a.origen.localeCompare(b.origen));
+    const totalRow = emb.rows.find(r => r.es_total);
+    const total = totalRow ? (({ es_total, ...r }) => r)(totalRow) : null;
+
+    const abandonos = aband.rows.map(r => {
+      const vigente = !!(r.claim_token && (!r.claim_expires_at || new Date(r.claim_expires_at) > new Date()));
+      return {
+        id: r.id, nombre: r.nombre, slug: r.slug, ciudad: r.city,
+        primera: r.primera, ultima: r.ultima, visitas: r.visitas,
+        ultimo_paso: r.ultimo_paso, origen: r.origen,
+        wa: _waMobilePY(r.whatsapp, r.phone),
+        claim_url: vigente ? `${site}/reclamar/?token=${r.claim_token}&utm_source=wa_seguimiento` : null,
+      };
+    });
+
+    res.json({ success: true, ready: true, days, activacion: act.rows[0] || null, embudo, total, motivos: motivos.rows, abandonos });
+  } catch (err) {
+    console.error('[claims/funnel]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// E1 (2026-10-13) — Revisión de reclamos AUTOMÁTICOS (por enlace con token)
+// ════════════════════════════════════════════════════════════════════════════
+// Columnas que Revertir restaura desde la foto previa (claim_snapshots.snapshot).
+const REVERT_COLS = ['name', 'trade_name', 'description', 'kit_cta', 'address', 'city', 'phone', 'whatsapp',
+  'email', 'website', 'image_url', 'cover_url', 'cover_focal_x', 'cover_focal_y', 'logo_emoji', 'hours',
+  'hours_json', 'tags', 'lat', 'lng', 'category_id', 'verified', 'social_instagram', 'social_facebook',
+  'social_tiktok', 'social_linkedin', 'social_twitter', 'social_youtube'];
+// Campos sensibles que el dueño propone y el admin aprueba (owner_change_requests).
+const CHANGE_FIELDS = { name: 'name', trade_name: 'trade_name', phone: 'phone', whatsapp: 'whatsapp', email: 'email' };
+const CHANGE_LABELS = { name: 'razón social', trade_name: 'nombre', phone: 'teléfono', whatsapp: 'WhatsApp', email: 'correo' };
+
+async function siteInfo() {
+  const r = await pool.query("SELECT key, value FROM site_config WHERE key IN ('site_name','site_url')").catch(() => ({ rows: [] }));
+  const c = {}; r.rows.forEach(x => { c[x.key] = x.value; });
+  return { siteName: c.site_name || 'RetoPA', siteUrl: String(c.site_url || process.env.SITE_URL || 'https://retopa.com.py').replace(/\/$/, '') };
+}
+// Link de acceso de UN uso (7 días). En la base queda solo el hash.
+async function mintAccessLink(userId, siteUrl) {
+  const raw = require('crypto').randomBytes(32).toString('hex');
+  const hash = require('crypto').createHash('sha256').update(raw).digest('hex');
+  const u = await pool.query(
+    `UPDATE users SET access_token_hash = $2, access_token_expires = NOW() + interval '7 days'
+      WHERE id = $1 AND is_active = TRUE AND role NOT IN ('admin','godmode') RETURNING id`, [userId, hash]);
+  return u.rows.length ? `${siteUrl}/?acceso=${raw}` : null;
+}
+// Datos del dueño para avisarle (correo y/o WhatsApp).
+async function ownerContact(businessId) {
+  const r = await pool.query(
+    `SELECT u.id, u.name, u.email, u.phone, b.slug, b.whatsapp, b.phone AS biz_phone,
+            COALESCE(NULLIF(b.trade_name,''), b.name) AS business
+       FROM businesses b JOIN users u ON u.id = b.claimed_by WHERE b.id = $1`, [businessId]);
+  return r.rows[0] || null;
+}
+const firstName = n => String(n || '').trim().split(/\s+/)[0] || '';
+
+// ── POST /admin/claims/confirm-auto ── "Está bien": el reclamo automático queda firme
+router.post('/claims/confirm-auto', async (req, res) => {
+  const id = parseInt(req.body && req.body.business_id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'business_id requerido' });
+  try {
+    const r = await pool.query(
+      `UPDATE businesses SET claim_reviewed_at = NOW(), verified = TRUE, updated_at = NOW()
+        WHERE id = $1 AND claim_status = 'approved' AND claim_method = 'token' AND claim_reviewed_at IS NULL
+        RETURNING id, slug, claimed_by`, [id]);
+    if (!r.rows.length) return res.status(404).json({ success: false, error: 'No hay un reclamo automático por revisar en esta ficha' });
+    logClaimEvent(pool, { event: 'reviewed', canal: 'admin', businessId: id, userId: r.rows[0].claimed_by });
+    invalidateBusinessCache(r.rows[0].slug);
+
+    // Avisar al dueño: correo (si tiene) + datos para "Avisar por WhatsApp".
+    let notify = null;
+    try {
+      const o = await ownerContact(id);
+      if (o) {
+        const { siteName, siteUrl } = await siteInfo();
+        const fichaUrl = `${siteUrl}/negocio/${o.slug}`;
+        const accessUrl = await mintAccessLink(o.id, siteUrl);
+        let emailed = false;
+        if (o.email) {
+          const { sendEmail } = require('../config/mail');
+          await sendEmail(o.email, 'claimConfirmed', { name: o.name, businessName: o.business, siteName, siteUrl, fichaUrl, accessUrl, panelUrl: `${siteUrl}/cliente/` })
+            .then(x => { emailed = !!(x && x.success !== false); }).catch(() => {});
+        }
+        const hola = firstName(o.name) ? `¡Hola ${firstName(o.name)}!` : '¡Hola!';
+        notify = {
+          wa: mobilePY(o.phone) || mobilePY(o.whatsapp) || mobilePY(o.biz_phone),
+          email: o.email || null, emailed,
+          message: `${hola} Revisamos tu reclamo: ${o.business} ya está verificado en ${siteName}.\nMirá tu ficha: ${fichaUrl}` +
+                   (accessUrl ? `\nPara entrar a tu panel: ${accessUrl}\n(vale 7 días y un solo uso)` : ''),
+        };
+      }
+    } catch (e) { console.warn('[claims/confirm-auto] aviso:', e.message); }
+    res.json({ success: true, notify });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// ── POST /admin/claims/revert ── "No era el dueño": vuelve la ficha a como estaba
+router.post('/claims/revert', async (req, res) => {
+  const id = parseInt(req.body && req.body.business_id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'business_id requerido' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const b = await client.query(
+      `SELECT id, slug FROM businesses WHERE id = $1 AND claim_status = 'approved' AND claim_method = 'token' FOR UPDATE`, [id]);
+    if (!b.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, error: 'Esta ficha no tiene un reclamo automático para revertir' }); }
+    const sn = await client.query(
+      `SELECT id, user_id, snapshot, categories, created_at FROM claim_snapshots
+        WHERE business_id = $1 AND reverted_at IS NULL ORDER BY created_at DESC LIMIT 1`, [id]);
+    if (!sn.rows.length) { await client.query('ROLLBACK'); return res.status(409).json({ success: false, error: 'No hay foto previa para revertir' }); }
+    const snap = sn.rows[0];
+
+    // 1) Valores anteriores, columna por columna (tipos vía jsonb_populate_record).
+    const cols = REVERT_COLS.map(c => `"${c}"`).join(', ');
+    const rcols = REVERT_COLS.map(c => `r."${c}"`).join(', ');
+    await client.query(
+      `UPDATE businesses SET (${cols}) = (SELECT ${rcols} FROM jsonb_populate_record(NULL::businesses, $2::jsonb) r),
+              claim_status = NULL, claim_method = NULL, claim_reviewed_at = NULL,
+              claimed_by = NULL, claimed_at = NULL, claim_token = NULL, updated_at = NOW()
+        WHERE id = $1`, [id, JSON.stringify(snap.snapshot)]);
+
+    // 2) Rubros previos.
+    await client.query('DELETE FROM business_categories WHERE business_id = $1', [id]);
+    for (const c of (snap.categories || [])) {
+      await client.query(
+        `INSERT INTO business_categories (business_id, category_id, is_primary, position) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (business_id, category_id) DO NOTHING`, [id, c.category_id, !!c.is_primary, c.position || 0]);
+    }
+    // 3) Fuera el que reclamó, y lo que subió después del reclamo.
+    if (snap.user_id) await client.query('DELETE FROM user_businesses WHERE business_id = $1 AND user_id = $2', [id, snap.user_id]);
+    await client.query('DELETE FROM business_gallery WHERE business_id = $1 AND created_at >= $2', [id, snap.created_at]);
+    await client.query(
+      `UPDATE owner_change_requests SET status = 'rejected', decided_at = NOW(), decided_by = $2
+        WHERE business_id = $1 AND status = 'pending'`, [id, req.user && req.user.id]);
+    await client.query(
+      `UPDATE service_leads SET status = 'rejected', notes = COALESCE(notes,'') || ' | Revertido por admin', updated_at = NOW()
+        WHERE business_id = $1 AND service_type = 'claim' AND status = 'won'`, [id]);
+    await client.query('UPDATE claim_snapshots SET reverted_at = NOW(), reverted_by = $2 WHERE id = $1', [snap.id, req.user && req.user.id]);
+    await client.query('COMMIT');
+
+    logClaimEvent(pool, { event: 'reverted', canal: 'admin', businessId: id, userId: snap.user_id });
+    invalidateBusinessCache(b.rows[0].slug);
+    try { await redisClient.del('dir:categories:all'); } catch (e) {}
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[claims/revert]', err);
+    res.status(500).json({ success: false, error: err.message });
+  } finally { client.release(); }
+});
+
+// ── POST /admin/claims/change-request ── Aprobar / rechazar un cambio sensible del dueño
+router.post('/claims/change-request', async (req, res) => {
+  const id = parseInt(req.body && req.body.id, 10);
+  const decision = req.body && req.body.decision;
+  if (!id || !['approve', 'reject'].includes(decision)) return res.status(400).json({ success: false, error: 'id y decision (approve|reject) requeridos' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await client.query(`SELECT * FROM owner_change_requests WHERE id = $1 AND status = 'pending' FOR UPDATE`, [id]);
+    if (!r.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, error: 'Cambio no encontrado o ya resuelto' }); }
+    const cr = r.rows[0];
+    const col = CHANGE_FIELDS[cr.field];
+    let slug = null;
+    if (decision === 'approve') {
+      if (!col) { await client.query('ROLLBACK'); return res.status(400).json({ success: false, error: 'Campo no permitido' }); }
+      const u = await client.query(`UPDATE businesses SET "${col}" = $2, updated_at = NOW() WHERE id = $1 RETURNING slug`, [cr.business_id, cr.new_value]);
+      slug = u.rows[0] && u.rows[0].slug;
+    }
+    await client.query(
+      `UPDATE owner_change_requests SET status = $2, decided_at = NOW(), decided_by = $3 WHERE id = $1`,
+      [id, decision === 'approve' ? 'approved' : 'rejected', req.user && req.user.id]);
+    await client.query('COMMIT');
+    if (slug) invalidateBusinessCache(slug);
+
+    // "Lo revisamos y te avisamos": correo (si tiene) + datos para WhatsApp.
+    let notify = null;
+    try {
+      const o = await ownerContact(cr.business_id);
+      if (o) {
+        const { siteName, siteUrl } = await siteInfo();
+        const fichaUrl = `${siteUrl}/negocio/${o.slug}`;
+        const approved = decision === 'approve';
+        const fieldLabel = CHANGE_LABELS[cr.field] || cr.field;
+        let emailed = false;
+        if (o.email) {
+          const { sendEmail } = require('../config/mail');
+          await sendEmail(o.email, 'ownerChangeDecision', { name: o.name, businessName: o.business, fieldLabel, newValue: cr.new_value, approved, fichaUrl, siteName })
+            .then(x => { emailed = !!(x && x.success !== false); }).catch(() => {});
+        }
+        const hola = firstName(o.name) ? `¡Hola ${firstName(o.name)}!` : '¡Hola!';
+        notify = {
+          wa: mobilePY(o.phone) || mobilePY(o.whatsapp) || mobilePY(o.biz_phone),
+          email: o.email || null, emailed,
+          message: approved
+            ? `${hola} Ya actualizamos el ${fieldLabel} de ${o.business} en ${siteName}: ahora es ${cr.new_value}.\n${fichaUrl}`
+            : `${hola} Revisamos el cambio de ${fieldLabel} que pediste para ${o.business} y no lo pudimos aplicar. ¿Lo vemos por acá?`,
+        };
+      }
+    } catch (e) { console.warn('[claims/change-request] aviso:', e.message); }
+    res.json({ success: true, notify });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ success: false, error: err.message });
+  } finally { client.release(); }
+});
+
+// ── POST /admin/users/:id/access-link ── Link de acceso de UN uso (7 días) ─────
+// Para mandar por WhatsApp a quien entra sin contraseña. Solo se guarda el hash.
+router.post('/users/:id/access-link', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'id inválido' });
+  try {
+    const { siteUrl } = await siteInfo();
+    const url = await mintAccessLink(id, siteUrl);
+    if (!url) return res.status(404).json({ success: false, error: 'Usuario no encontrado, inactivo o administrador' });
+    const u = await pool.query('SELECT id, name, phone FROM users WHERE id = $1', [id]);
+    const biz = await pool.query(
+      `SELECT COALESCE(NULLIF(b.trade_name,''), b.name) AS nombre, b.whatsapp, b.phone FROM user_businesses ub
+         JOIN businesses b ON b.id = ub.business_id WHERE ub.user_id = $1 AND ub.is_owner ORDER BY ub.business_id LIMIT 1`, [id]);
+    const b0 = biz.rows[0] || {};
+    res.json({ success: true, url, expires_days: 7,
+      name: u.rows[0].name, business: b0.nombre || null,
+      wa: mobilePY(u.rows[0].phone) || mobilePY(b0.whatsapp) || mobilePY(b0.phone) || null });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// ── Pedidos de RECLAMO desde la ficha pública (2026-10-14) ───────────────────
+// kind 'whatsapp': el dueño nos escribe desde el WhatsApp de la ficha con un código
+//   → chequeás que el chat venga de ESE número y le mandás el link de reclamo.
+// kind 'revision': pidió con otro número → si lo das por bueno, le mandás el link.
+// El link es el de siempre (/reclamar?token=…): el resto del flujo no cambia.
+router.get('/claim-requests', async (req, res) => {
+  try {
+    const ok = await pool.query("SELECT to_regclass('public.claim_requests') IS NOT NULL AS ok");
+    if (!ok.rows[0].ok) return res.json({ success: true, data: [] });
+    const { rows } = await pool.query(`
+      SELECT cr.id, cr.business_id, cr.kind, cr.phone, cr.code, cr.name, cr.email, cr.message, cr.created_at,
+             COALESCE(NULLIF(b.trade_name,''), b.name) AS business, b.slug, b.city, b.verified,
+             EXISTS (SELECT 1 FROM user_businesses ub WHERE ub.business_id = b.id AND ub.is_owner) AS has_owner
+        FROM claim_requests cr JOIN businesses b ON b.id = cr.business_id
+       WHERE cr.status = 'pending' AND cr.created_at > NOW() - interval '30 days'
+       ORDER BY cr.created_at DESC LIMIT 100`);
+    res.json({ success: true, data: rows });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.post('/claim-requests/:id/link', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  try {
+    const r = await pool.query(`
+      SELECT cr.*, b.slug, b.claim_token, b.claim_expires_at, b.claim_status, COALESCE(NULLIF(b.trade_name,''), b.name) AS business,
+             EXISTS (SELECT 1 FROM user_businesses ub WHERE ub.business_id = b.id AND ub.is_owner) AS has_owner
+        FROM claim_requests cr JOIN businesses b ON b.id = cr.business_id WHERE cr.id = $1`, [id]);
+    if (!r.rows.length) return res.status(404).json({ success: false, error: 'Pedido no encontrado' });
+    const cr = r.rows[0];
+    if (cr.has_owner || cr.claim_status === 'approved')
+      return res.status(409).json({ success: false, error: 'Esa ficha ya tiene dueño: no hace falta el link.' });
+    let token = cr.claim_token;
+    if (!(token && (!cr.claim_expires_at || new Date(cr.claim_expires_at) > new Date()))) {
+      token = require('crypto').randomBytes(32).toString('hex');
+      await pool.query(`UPDATE businesses SET claim_token = $2, claim_token_at = NOW(), claim_expires_at = NULL WHERE id = $1`, [cr.business_id, token]);
+    }
+    await pool.query(`UPDATE claim_requests SET status = 'sent', handled_at = NOW(), handled_by = $2 WHERE id = $1`, [id, req.user && req.user.id]);
+    const { siteName, siteUrl } = await siteInfo();
+    const url = `${siteUrl}/reclamar/?token=${token}&utm_source=ficha`;
+    const hola = firstName(cr.name) ? `¡Hola ${firstName(cr.name)}!` : '¡Hola!';
+    res.json({ success: true, data: { wa: cr.phone, url,
+      message: `${hola} Recibimos tu pedido para reclamar «${cr.business}» en ${siteName}. Entrá acá y en 30 segundos es tuyo, sin contraseña:\n${url}` } });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.post('/claim-requests/:id/dismiss', async (req, res) => {
+  try {
+    await pool.query(`UPDATE claim_requests SET status = 'dismissed', handled_at = NOW(), handled_by = $2 WHERE id = $1 AND status = 'pending'`,
+      [parseInt(req.params.id, 10), req.user && req.user.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// ── Pedidos de acceso por WhatsApp (login sin contraseña, 2026-10-13) ────────
+// El dueño tocó "Pedir acceso por WhatsApp": queda acá para mandarle su link.
+router.get('/access-requests', async (req, res) => {
+  try {
+    const ok = await pool.query("SELECT to_regclass('public.access_requests') IS NOT NULL AS ok");
+    if (!ok.rows[0].ok) return res.json({ success: true, data: [] });
+    const { rows } = await pool.query(`
+      SELECT DISTINCT ON (ar.phone) ar.id, ar.phone, ar.created_at, ar.user_id,
+             u.name AS user_name, u.email AS user_email,
+             (SELECT COALESCE(NULLIF(b.trade_name,''), b.name) FROM user_businesses ub JOIN businesses b ON b.id = ub.business_id
+               WHERE ub.user_id = u.id AND ub.is_owner ORDER BY ub.business_id LIMIT 1) AS business
+        FROM access_requests ar
+        LEFT JOIN users u ON u.id = ar.user_id
+       WHERE ar.handled_at IS NULL AND ar.created_at > NOW() - interval '30 days'
+       ORDER BY ar.phone, ar.created_at DESC`);
+    rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    res.json({ success: true, data: rows.map(r => ({ ...r, wa: mobilePY(r.phone) })) });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+router.post('/access-requests/handled', async (req, res) => {
+  const phone = String((req.body && req.body.phone) || '');
+  if (!phone) return res.status(400).json({ success: false, error: 'phone requerido' });
+  try {
+    await pool.query(`UPDATE access_requests SET handled_at = NOW(), handled_by = $2 WHERE phone = $1 AND handled_at IS NULL`,
+      [phone, req.user && req.user.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
 router.post('/claims/approve', async (req, res) => {
   const { business_id } = req.body;
   if (!business_id) return res.status(400).json({ success: false, error: 'business_id requerido' });
@@ -2790,6 +3403,7 @@ router.post('/claims/approve', async (req, res) => {
        WHERE business_id=$1 AND service_type='claim' AND status IN ('new','pending')`, [business_id]
     );
     await client.query('COMMIT');
+    logClaimEvent(pool, { event: 'approved', canal: 'admin', businessId: biz.id, userId: info.userId });
 
     emailClaimAccess(biz, info, contact.name, token).catch(e => console.warn('[Claim] email acceso:', e.message));
     res.json({ success: true, data: biz, access: { user_id: info.userId, created: info.created, email: info.email } });
@@ -2821,6 +3435,7 @@ router.post('/claims/grant-access', async (req, res) => {
     if (info.created) token = await issueActivationToken(client, info.userId);
     await client.query("UPDATE businesses SET claim_status=COALESCE(claim_status,'approved'), verified=TRUE, updated_at=NOW() WHERE id=$1", [business_id]);
     await client.query('COMMIT');
+    logClaimEvent(pool, { event: 'access_granted', canal: 'admin', businessId: biz.id, userId: info.userId });
 
     emailClaimAccess(biz, info, contact.name, token).catch(e => console.warn('[Claim] email acceso (grant):', e.message));
     res.json({ success: true, access: { user_id: info.userId, created: info.created, email: info.email } });
@@ -2841,6 +3456,7 @@ router.post('/claims/reject', async (req, res) => {
     await pool.query(
       `UPDATE businesses SET claim_status='rejected', updated_at=NOW() WHERE id=$1`, [business_id]
     );
+    logClaimEvent(pool, { event: 'rejected', canal: 'admin', businessId: business_id });
     if (reason) {
       await pool.query(
         `UPDATE service_leads SET status='rejected',
@@ -2925,7 +3541,7 @@ router.get('/semaforo', async (req, res) => {
         const c = catId != null ? catMap.get(catId) : null;
         e = {
           category_id: catId != null ? catId : null,
-          category: c ? c.name : 'Sin categoría',
+          category: c ? c.name : 'Sin rubro',
           category_slug: c ? c.slug : null,
           city: (cityRaw && String(cityRaw).trim()) ? String(cityRaw).trim() : 'Sin ciudad',
           fichas: 0, reclamadas: 0, views: 0, whatsapp: 0, searches: 0, searches_prev: 0,
@@ -3201,5 +3817,127 @@ router.post('/plan-requests/:id/cancel', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FUSIÓN DE FICHAS DUPLICADAS (2026-10-14) — helpers/fichaMerge.js
+// El asistente de Captación propone (con evidencia y fuente); el admin decide.
+// Cada decisión queda en business_merges con autor, evidencia y valores previos.
+// ═══════════════════════════════════════════════════════════════════════════
+const fichaMerge = require('../helpers/fichaMerge');
+
+router.get('/merges/candidates', async (req, res) => {
+  try {
+    const data = await fichaMerge.findCandidates(pool, { days: req.query.days, businessId: req.query.business_id });
+    res.json({ success: true, data });
+  } catch (err) { console.error('[merges/candidates]', err); res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.get('/merges/preview', async (req, res) => {
+  try {
+    const r = await fichaMerge.preview(pool, req.query.survivor_id, req.query.duplicate_id);
+    if (r.error) return res.status(r.status || 400).json({ success: false, error: r.error });
+    // Evidencia del par (si el asistente lo detectó), para mostrarla y guardarla.
+    const cands = await fichaMerge.findCandidates(pool, { days: 730, businessId: Math.max(+req.query.survivor_id, +req.query.duplicate_id) });
+    const c = cands.find(x => [x.new_id, x.old_id].sort().join() === [+req.query.survivor_id, +req.query.duplicate_id].sort().join());
+    r.evidence = c ? c.evidence : [];
+    r.lead_id = c ? c.lead_id : null;
+    res.json({ success: true, data: r });
+  } catch (err) { console.error('[merges/preview]', err); res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.post('/merges/apply', async (req, res) => {
+  const b = req.body || {};
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await fichaMerge.applyMerge(client, {
+      survivorId: b.survivor_id, duplicateId: b.duplicate_id, take: b.take || [],
+      adminId: req.user && req.user.id, evidence: Array.isArray(b.evidence) ? b.evidence.slice(0, 20) : [],
+      leadId: parseInt(b.lead_id, 10) || null, note: b.note ? String(b.note).slice(0, 500) : null,
+    });
+    if (r.error) { await client.query('ROLLBACK'); return res.status(r.status === 409 ? 409 : 400).json({ success: false, error: r.error }); }
+    await client.query('COMMIT');
+    for (const sl of r.slugs) await invalidateBusinessCache(sl);
+
+    // Aviso opcional al dueño (botón "Avisar por WhatsApp"): ya está, no cargues nada.
+    let notify = null;
+    try {
+      const o = (await pool.query(
+        `SELECT u.id, u.name, u.email, u.phone, b.slug, b.whatsapp, b.phone AS biz_phone,
+                COALESCE(NULLIF(b.trade_name,''), b.name) AS business
+           FROM businesses b
+           JOIN users u ON u.id = COALESCE(
+                (SELECT ub.user_id FROM user_businesses ub WHERE ub.business_id = b.id AND ub.is_owner ORDER BY ub.id LIMIT 1),
+                b.claimed_by)
+          WHERE b.id = $1`, [parseInt(b.survivor_id, 10)])).rows[0];
+      if (o) {
+        const { siteName, siteUrl } = await siteInfo();
+        const accessUrl = await mintAccessLink(o.id, siteUrl);
+        const hola = firstName(o.name) ? `¡Hola ${firstName(o.name)}!` : '¡Hola!';
+        const fichaUrl = `${siteUrl}/negocio/${o.slug}`;
+        let emailed = false;
+        if (o.email) {
+          const { sendEmail } = require('../config/mail');
+          await sendEmail(o.email, 'fichasFusionadas', { name: o.name, businessName: o.business, siteName, fichaUrl, accessUrl })
+            .then(x => { emailed = !!(x && x.success !== false); }).catch(() => {});
+        }
+        notify = {
+          wa: mobilePY(o.phone) || mobilePY(o.whatsapp) || mobilePY(o.biz_phone),
+          email: o.email || null, emailed,
+          message: `${hola} Vimos que cargaste de nuevo ${o.business} en ${siteName}. Ya lo unimos a tu ficha de siempre, ` +
+                   `con tus visitas y lo que agregaste: no tenés que cargar nada más.\nTu ficha: ${siteUrl}/negocio/${o.slug}` +
+                   (accessUrl ? `\nPara entrar a tu panel: ${accessUrl}\n(vale 7 días y un solo uso)` : ''),
+        };
+      }
+    } catch (e) { console.warn('[merges/apply] aviso:', e.message); }
+    res.json({ success: true, notify, data: { merge_id: r.id, fields: r.fields, moved: r.moved } });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[merges/apply]', err); res.status(500).json({ success: false, error: err.message });
+  } finally { client.release(); }
+});
+
+router.post('/merges/:id/revert', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await fichaMerge.revertMerge(client, req.params.id, req.user && req.user.id);
+    if (r.error) { await client.query('ROLLBACK'); return res.status(r.status === 409 ? 409 : 400).json({ success: false, error: r.error }); }
+    await client.query('COMMIT');
+    for (const sl of r.slugs) await invalidateBusinessCache(sl);
+    res.json({ success: true, data: { restored: r.restored, kept: r.kept } });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[merges/revert]', err); res.status(500).json({ success: false, error: err.message });
+  } finally { client.release(); }
+});
+
+// "No es la misma": queda registrado para que el asistente no la vuelva a proponer.
+router.post('/merges/discard', async (req, res) => {
+  try {
+    const o = parseInt(req.body && req.body.old_id, 10), n = parseInt(req.body && req.body.new_id, 10);
+    if (!o || !n || o === n) return res.status(400).json({ success: false, error: 'Faltan las fichas' });
+    const ev = Array.isArray(req.body.evidence) ? req.body.evidence.slice(0, 20) : [];
+    const r = await pool.query(
+      `INSERT INTO business_merges (survivor_id, duplicate_id, lead_id, status, evidence, note, created_by)
+       VALUES ($1,$2,$3,'descartada',$4,$5,$6) RETURNING id`,
+      [o, n, parseInt(req.body.lead_id, 10) || null, JSON.stringify(ev), req.body.note ? String(req.body.note).slice(0, 500) : null, req.user && req.user.id]);
+    res.json({ success: true, data: { id: r.rows[0].id } });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.get('/merges', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT m.id, m.survivor_id, m.duplicate_id, m.lead_id, m.status, m.evidence, m.fields_taken, m.moved, m.note,
+             m.created_at, m.reverted_at, s.name AS survivor_name, s.slug AS survivor_slug, d.name AS duplicate_name,
+             ua.name AS created_by_name, ur.name AS reverted_by_name
+        FROM business_merges m
+        LEFT JOIN businesses s ON s.id = m.survivor_id LEFT JOIN businesses d ON d.id = m.duplicate_id
+        LEFT JOIN users ua ON ua.id = m.created_by LEFT JOIN users ur ON ur.id = m.reverted_by
+       ORDER BY m.created_at DESC LIMIT 50`);
+    res.json({ success: true, data: rows });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
 
 module.exports = router;

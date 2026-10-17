@@ -10,7 +10,7 @@ async function loadCategories() {
     const bizSelect = document.getElementById('bizCategory');
 
     if (!data.success || !data.data.length) {
-        grid.innerHTML = '<div class="col-span-full text-center text-gray-500">No hay categorías disponibles</div>';
+        grid.innerHTML = '<div class="col-span-full text-center text-gray-500">No hay rubros disponibles</div>';
         return;
     }
 
@@ -47,7 +47,7 @@ async function loadCategories() {
             <p class="cat-count text-xs text-gray-400 mt-1 font-medium">
                 ${(cat.businessCount || 0) > 0 ? Number(cat.businessCount).toLocaleString() + ' empresas' : 'Sin empresas'}
             </p>
-            ${kids.length ? `<p class="text-[10px] text-gray-400 mt-0.5">${kids.length} subcategorías</p>` : ''}
+            ${kids.length ? `<p class="text-[10px] text-gray-400 mt-0.5">${kids.length} ${kids.length === 1 ? 'subrubro' : 'subrubros'}</p>` : ''}
         </div>`;
     };
 
@@ -58,7 +58,7 @@ async function loadCategories() {
         const expandBtn = document.createElement('button');
         expandBtn.id = 'expandCatsBtn';
         expandBtn.className = 'col-span-2 md:col-span-3 lg:col-span-5 text-sm text-brand-600 hover:text-brand-800 font-medium py-2 flex items-center justify-center gap-2 transition';
-        expandBtn.innerHTML = `<i class="fas fa-chevron-down"></i> Ver todas las categorías (${rest.length} más)`;
+        expandBtn.innerHTML = `<i class="fas fa-chevron-down"></i> Ver todos los rubros (${rest.length} más)`;
         expandBtn.onclick = () => {
             expandBtn.remove();
             grid.insertAdjacentHTML('beforeend', rest.map((cat, i) => renderCard(cat, i + VISIBLE)).join(''));
@@ -88,8 +88,8 @@ async function loadCategories() {
         return allOpt + groups;
     };
 
-    if (select)    select.innerHTML    = buildGroupedOptions('slug', 'Todas las categorías');
-    if (bizSelect) bizSelect.innerHTML = buildGroupedOptions('id',   'Seleccioná una categoría');
+    if (select)    select.innerHTML    = buildGroupedOptions('slug', 'Todos los rubros');
+    if (bizSelect) bizSelect.innerHTML = buildGroupedOptions('id',   'Seleccioná un rubro');
 
     // Alimentar combobox del hero (Sprint 5)
     if (typeof populateCatCombo === 'function') populateCatCombo(data.data);

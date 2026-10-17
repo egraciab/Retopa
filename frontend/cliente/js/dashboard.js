@@ -6,6 +6,7 @@
 let activeDashBiz = null;
 
 async function loadDashboard() {
+    maybeInvitePassword(); // 2026-10-13 — no bloquea
     if (!myBusinesses.length) {
         document.getElementById('dashBizCard').innerHTML = `
             <div class="text-center py-8">
@@ -581,6 +582,55 @@ function wizardStep(dir) {
 }
 
 function closeWelcomeWizard() { document.getElementById('welcomeWizard')?.remove(); }
+
+// ── 2026-10-13: invitación a crear contraseña (quien entró por enlace) ──────
+// No obliga: el dueño puede seguir entrando con enlaces. "Ahora no" la esconde 3 días.
+let _pwInviteChecked = false;
+async function maybeInvitePassword() {
+    if (_pwInviteChecked || document.getElementById('pwInvite')) return;
+    _pwInviteChecked = true;
+    try { const until = Number(localStorage.getItem('retopa_pwinvite_off') || 0); if (until > Date.now()) return; } catch (e) {}
+    const me = await clientGet('/client/me');
+    if (!me || !me.success || me.data.has_password !== false) return;
+    const mount = document.getElementById('mainContent');
+    if (!mount) return;
+    const card = document.createElement('div');
+    card.id = 'pwInvite';
+    card.style.cssText = 'background:#fff;border:1px solid #e0e7ff;border-radius:16px;padding:14px;margin:0 0 14px;box-shadow:0 2px 10px rgba(27,58,107,.06)';
+    card.innerHTML = `
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div style="width:34px;height:34px;border-radius:10px;background:#eef2ff;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fas fa-key" style="color:#4F46E5"></i></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:800;color:#0f172a">Creá tu contraseña para entrar más rápido</div>
+            <div style="font-size:12px;color:#64748b;line-height:1.4;margin-top:2px">Hoy entrás con un enlace. Con contraseña entrás cuando quieras con tu WhatsApp o tu correo.</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+          <input id="pwInviteNew" type="password" autocomplete="new-password" placeholder="Nueva contraseña (mín. 8)" style="border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 12px;font-size:16px">
+          <input id="pwInviteRep" type="password" autocomplete="new-password" placeholder="Repetila" style="border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 12px;font-size:16px">
+          <div id="pwInviteErr" style="display:none;font-size:12px;color:#b91c1c"></div>
+          <div style="display:flex;gap:8px">
+            <button type="button" onclick="savePasswordInvite()" style="flex:1;background:#1B3A6B;color:#fff;border:none;border-radius:10px;padding:11px;font-weight:800;font-size:14px;cursor:pointer">Crear contraseña</button>
+            <button type="button" onclick="dismissPasswordInvite()" style="background:none;border:none;color:#94a3b8;font-size:13px;cursor:pointer;padding:0 8px">Ahora no</button>
+          </div>
+        </div>`;
+    mount.insertBefore(card, mount.firstChild);
+}
+async function savePasswordInvite() {
+    const a = document.getElementById('pwInviteNew').value, b = document.getElementById('pwInviteRep').value;
+    const err = document.getElementById('pwInviteErr');
+    const show = m => { err.textContent = m; err.style.display = m ? 'block' : 'none'; };
+    if (a.length < 8) return show('Mínimo 8 caracteres.');
+    if (a !== b) return show('Las contraseñas no coinciden.');
+    const res = await clientPut('/client/me', { password: a });
+    if (!res || !res.success) return show((res && res.error) || 'No se pudo guardar. Probá de nuevo.');
+    document.getElementById('pwInvite')?.remove();
+    showToastClient('Contraseña creada ✅ Ya podés entrar con tu WhatsApp o correo.');
+}
+function dismissPasswordInvite() {
+    try { localStorage.setItem('retopa_pwinvite_off', String(Date.now() + 3 * 864e5)); } catch (e) {}
+    document.getElementById('pwInvite')?.remove();
+}
 
 // Nudge in-app: banner de completitud (descartable por día)
 function showOnboardingNudge(biz) {

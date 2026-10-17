@@ -1280,7 +1280,7 @@ function buildCategoryHTML(o) {
   }).join('');
   const listHtml = o.total > 0
     ? `<ul class="bl">${items}</ul>`
-    : `<p class="empty">Todavía no hay negocios cargados en esta categoría. <a href="/negocios">Ver todo el directorio →</a></p>`;
+    : `<p class="empty">Todavía no hay negocios cargados en este rubro. <a href="/negocios">Ver todo el directorio →</a></p>`;
   const countLabel = o.total > 0
     ? `${o.total.toLocaleString('es-PY')} ${o.total === 1 ? 'negocio' : 'negocios'}${o.cityName ? ' en ' + esc(o.cityName) : ' en Paraguay'}`
     : '';
@@ -1417,7 +1417,7 @@ app.get('/negocios', async (req, res) => {
     const siteName = cfg.site_name||SITE_NAME, siteUrl = cfg.site_url||SITE_URL;
     const total = stats.businesses||0;
     const title = `Directorio de Negocios en Paraguay (${total.toLocaleString()}+) — ${siteName}`;
-    const desc  = truncate(`Encontrá entre ${total.toLocaleString()} empresas y profesionales en Paraguay. Buscá por categoría, ciudad o nombre. ${siteName}.`);
+    const desc  = truncate(`Encontrá entre ${total.toLocaleString()} empresas y profesionales en Paraguay. Buscá por rubro, ciudad o nombre. ${siteName}.`);
     const breadcrumb = JSON.stringify({'@context':'https://schema.org','@type':'BreadcrumbList',itemListElement:[
       {'@type':'ListItem',position:1,name:siteName,item:siteUrl},
       {'@type':'ListItem',position:2,name:'Directorio de Negocios',item:`${siteUrl}/negocios`},
@@ -1847,6 +1847,11 @@ app.get('/ofertas/:ciudad', async (req, res) => {
 
 // ── /reclamar — página de claim desde link del email de notificación ──────────
 app.get('/reclamar', (req, res) => {
+  res.sendFile(path.join(__dirname, 'reclamar', 'index.html'));
+});
+
+// ── /registrar — alta de negocio en una pantalla (misma página que /reclamar) ──
+app.get(['/registrar', '/registrar/'], (req, res) => {
   res.sendFile(path.join(__dirname, 'reclamar', 'index.html'));
 });
 

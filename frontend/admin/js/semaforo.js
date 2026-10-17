@@ -116,7 +116,7 @@ function semaforoShiftMonth(delta){
 
 function exportSemaforoCsv(){
     if (!_semaforoData || !_semaforoData.rows) return;
-    const head = ['Categoria','Ciudad','Estado','Visitas','WhatsApp','Busquedas','Busquedas_mes_previo','Reclamadas','Fichas'];
+    const head = ['Rubro','Ciudad','Estado','Visitas','WhatsApp','Busquedas','Busquedas_mes_previo','Reclamadas','Fichas'];
     const esc = v => `"${String(v == null ? '' : v).replace(/"/g,'""')}"`;
     const lines = [head.join(',')];
     for (const r of _semaforoData.rows) {

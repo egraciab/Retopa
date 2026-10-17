@@ -34,7 +34,7 @@ function requireAdmin(req, res, next) {
 }
 router.use(requireAdmin);
 
-const ESTADOS = ['pendiente', 'enviado', 'respondio', 'reclamo', 'rechazo'];
+const ESTADOS = ['pendiente', 'enviado', 'respondio', 'reclamo', 'rechazo', 'no_es'];
 
 async function getSiteUrl() {
     try {
@@ -45,6 +45,40 @@ async function getSiteUrl() {
         return (process.env.SITE_URL || 'https://retopa.com.py').replace(/\/$/, '');
     }
 }
+
+// ── POST /claim-link/:businessId — E1: {link_reclamo} de la plantilla ─────────
+// Devuelve el enlace de reclamo con token de la ficha: reusa el vigente o genera
+// uno nuevo SIN vencimiento (vale mientras la ficha no esté reclamada). Se llama
+// al tocar "WhatsApp", así no se emiten tokens para fichas que nadie contacta.
+router.post('/claim-link/:businessId', async (req, res) => {
+    const id = parseInt(req.params.businessId, 10);
+    if (!id) return res.status(400).json({ success: false, error: 'businessId inválido' });
+    try {
+        const b = await pool.query(
+            `SELECT b.id, b.slug, b.claim_token, b.claim_expires_at, b.claim_status,
+                    EXISTS (SELECT 1 FROM user_businesses ub WHERE ub.business_id = b.id AND ub.is_owner) AS has_owner
+               FROM businesses b WHERE b.id = $1 AND b.is_active = TRUE`, [id]);
+        if (!b.rows.length) return res.status(404).json({ success: false, error: 'Ficha no encontrada' });
+        const biz = b.rows[0];
+        const siteUrl = await getSiteUrl();
+        if (biz.claim_status === 'approved' || biz.has_owner) {
+            // Ya tiene dueño: no tiene sentido un reclamo → se manda la ficha.
+            return res.json({ success: true, claimed: true, url: `${siteUrl}/negocio/${biz.slug}` });
+        }
+        let token = biz.claim_token;
+        const vigente = token && (!biz.claim_expires_at || new Date(biz.claim_expires_at) > new Date());
+        if (!vigente) {
+            token = require('crypto').randomBytes(32).toString('hex');
+            await pool.query(
+                `UPDATE businesses SET claim_token = $2, claim_token_at = NOW(), claim_expires_at = NULL WHERE id = $1`,
+                [id, token]);
+        }
+        res.json({ success: true, claimed: false, url: `${siteUrl}/reclamar/?token=${token}&utm_source=wa&utm_campaign=prospectos` });
+    } catch (err) {
+        console.error('[prospects/claim-link]', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 
 // ── GET /sources — orígenes distintos con conteo (para el dropdown) ──────────
 router.get('/sources', async (req, res) => {

@@ -399,6 +399,8 @@ async function showNotifications() {
     }
     const s = data.stats || {};
     const items = [];
+    if (parseInt(s.pending_claims) > 0)
+        items.push({ icon: 'fa-ribbon', color: 'text-amber-500 bg-amber-50', text: `${s.pending_claims} ${parseInt(s.pending_claims) === 1 ? 'reclamo pendiente' : 'reclamos pendientes'}`, section: 'claims' });
     if (parseInt(s.pending_leads) > 0)
         items.push({ icon: 'fa-envelope', color: 'text-red-500 bg-red-50', text: `${s.pending_leads} leads pendientes`, section: 'leads' });
     if (parseInt(s.pending_verification) > 0)

@@ -3,7 +3,72 @@
  * openRegistroEmpresaCheck(), registro empresa, upload imágenes
  */
 
+// ── Modal de ALTA / RECLAMO (2026-10-17) ─────────────────────────────────────
+// La misma pantalla de /registrar y /reclamar, pero DENTRO del sitio, como modal
+// (iframe ?embed=1: una sola implementación, probada). Se cierra con la X, Esc,
+// tocando afuera o con el "atrás" del celular. Al terminar, la pantalla lleva a
+// Mi Portal (navega la página entera, no el modal).
+function rpOpenFlowModal(url, title) {
+    rpCloseFlowModal(true);
+    const desk = window.matchMedia('(min-width: 641px)').matches;
+    const wrap = document.createElement('div');
+    wrap.id = 'rpFlowModal';
+    wrap.style.cssText = `position:fixed;inset:0;z-index:10001;display:flex;justify-content:center;align-items:${desk ? 'center' : 'flex-end'}`;
+    const src = url + (url.includes('?') ? '&' : '?') + 'embed=1';
+    wrap.innerHTML = `
+      <div data-rpbg style="position:absolute;inset:0;background:rgba(15,23,42,.55)"></div>
+      <div data-rppanel role="dialog" aria-modal="true" aria-label="${title}"
+           style="position:relative;width:100%;max-width:${desk ? '480px' : '100%'};background:#f8fafc;display:flex;flex-direction:column;overflow:hidden;
+                  border-radius:${desk ? '20px' : '20px 20px 0 0'};box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px 10px 18px;background:#fff;border-bottom:1px solid #e2e8f0">
+          <b data-rptitle style="font-size:15px;color:#0f172a;font-family:inherit">${title}</b>
+          <button type="button" data-rpclose aria-label="Cerrar"
+                  style="width:36px;height:36px;flex-shrink:0;border-radius:50%;border:none;background:#f1f5f9;color:#475569;font-size:20px;line-height:1;cursor:pointer">×</button>
+        </div>
+        <iframe src="${src}" title="${title}" style="flex:1;width:100%;border:0;background:transparent"></iframe>
+      </div>`;
+    document.body.appendChild(wrap);
+    document.body.style.overflow = 'hidden';
+    const panel = wrap.querySelector('[data-rppanel]');
+    const fit = () => {
+        const vv = window.visualViewport; const h = vv ? vv.height : window.innerHeight;
+        panel.style.height = Math.round(Math.min(h * (desk ? 0.9 : 0.94), desk ? 860 : 99999)) + 'px';
+    };
+    fit();
+    wrap._fit = fit; (window.visualViewport || window).addEventListener('resize', fit);
+    wrap.querySelector('[data-rpbg]').onclick = () => rpCloseFlowModal();
+    wrap.querySelector('[data-rpclose]').onclick = () => rpCloseFlowModal();
+    wrap._key = e => { if (e.key === 'Escape') rpCloseFlowModal(); };
+    document.addEventListener('keydown', wrap._key);
+    wrap._msg = e => {
+        if (e.origin !== location.origin || !e.data) return;
+        if (e.data.rp === 'close') rpCloseFlowModal();
+        else if (e.data.rp === 'title' && e.data.t) wrap.querySelector('[data-rptitle]').textContent = String(e.data.t).slice(0, 80);
+    };
+    window.addEventListener('message', wrap._msg);
+    // "Atrás" cierra el modal (entrada de historial propia, misma URL).
+    try { history.pushState(Object.assign({}, history.state || {}, { rpFlow: 1 }), '', location.href); } catch (e) {}
+}
+function rpCloseFlowModal(fromHistory) {
+    const wrap = document.getElementById('rpFlowModal');
+    if (!wrap) return;
+    if (!fromHistory) { try { if (history.state && history.state.rpFlow) { history.back(); return; } } catch (e) {} }
+    (window.visualViewport || window).removeEventListener('resize', wrap._fit);
+    document.removeEventListener('keydown', wrap._key);
+    window.removeEventListener('message', wrap._msg);
+    wrap.remove();
+    if (!document.querySelector('#profileModal:not(.hidden)')) document.body.style.overflow = '';
+}
+window.addEventListener('popstate', () => { if (document.getElementById('rpFlowModal')) rpCloseFlowModal(true); });
+
 function openRegistroEmpresaCheck(preselectedPlan = null) {
+    // 2026-10-14: alta en UNA pantalla (/registrar): nombre, rubro de lista, ciudad,
+    // WhatsApp y listo → directo a Mi Portal. Antes de crear, si ese WhatsApp ya está
+    // en una ficha, pregunta "¿Es esta tu ficha?". 2026-10-17: como modal.
+    const plan = ['featured', 'premium'].includes(preselectedPlan) ? preselectedPlan : '';
+    rpOpenFlowModal('/registrar' + (plan ? '?plan=' + plan : ''), 'Registrá tu negocio gratis');
+    return;
+    // eslint-disable-next-line no-unreachable
     // SIN login forzado: la puerta de entrada abre directo al formulario corto.
     // Si hay sesión activa, la aprovechamos para enganchar la ficha al usuario y
     // pre-cargar su correo; si no, pedimos un correo en el propio formulario.
@@ -18,6 +83,9 @@ function openRegistroEmpresaCheck(preselectedPlan = null) {
 }
 
 function openRegistroModal(preselectedPlan = null) {
+    // 2026-10-17: el formulario viejo ya no se usa (dejaba la ficha sin dueño).
+    // Cualquier camino que lo abra (p. ej. la acción pendiente tras el login) va a /registrar.
+    if (typeof openRegistroEmpresaCheck === 'function') return openRegistroEmpresaCheck(preselectedPlan);
     const modal = document.getElementById('registroModal');
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
@@ -271,7 +339,7 @@ function _rebuildComboUI() {
         wrap.id = `_regComboWrap_${type}`;
 
         const icon = type === 'cat' ? 'fa-tag' : 'fa-map-marker-alt';
-        const placeholder = type === 'cat' ? 'Buscá una categoría...' : 'Buscá una ciudad...';
+        const placeholder = type === 'cat' ? 'Buscá un rubro...' : 'Buscá una ciudad...';
 
         wrap.innerHTML = `
             <i class="fas ${icon}" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#9ca3af;pointer-events:none;z-index:1"></i>

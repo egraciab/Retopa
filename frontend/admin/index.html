@@ -177,7 +177,7 @@
                     <i class="fas fa-building w-5"></i> Empresas
                 </a>
                 <a href="#" onclick="showSection('uncategorized')" class="sidebar-item flex items-center gap-3 px-6 py-3 text-sm font-medium" id="nav-uncategorized">
-                    <i class="fas fa-tag w-5"></i> Sin categoría
+                    <i class="fas fa-tag w-5"></i> Sin rubro
                     <span id="uncategorizedBadge" class="ml-auto bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full hidden">0</span>
                 </a>
                 <a href="#" onclick="showSection('categories')" class="sidebar-item flex items-center gap-3 px-6 py-3 text-sm font-medium" id="nav-categories">
@@ -604,7 +604,7 @@
                                     class="border border-gray-200 rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-[#0ea5e9] w-80"
                                     oninput="debounceBizSearch()">
                             </div>
-                            <button onclick="downloadAdminKits()" class="border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2" title="Descarga los kits QR de los negocios del filtro actual (categoría y/o ciudad), tope 100">
+                            <button onclick="downloadAdminKits()" class="border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2" title="Descarga los kits QR de los negocios del filtro actual (rubro y/o ciudad), tope 100">
                                 <i class="fas fa-qrcode text-[#0ea5e9]"></i> Descargar kits
                             </button>
                             <select id="bizFilterPlan" class="border border-gray-200 rounded-lg px-4 py-2 text-sm" onchange="loadAdminBusinesses(1)">
@@ -721,6 +721,9 @@
                         <p class="text-[11px] text-gray-400 mt-0.5" id="ventaKpiPerdidosDelta">&nbsp;</p>
                     </div>
                 </div>
+
+                <!-- Asistente: fichas duplicadas (js/merge.js) -->
+                <div id="mergeAssistant" class="hidden mb-4"></div>
 
                 <!-- Toolbar -->
                 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
@@ -869,7 +872,7 @@
                         <div class="flex gap-2 flex-wrap">
                             <div class="relative">
                                 <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
-                                <input type="text" id="userSearch" placeholder="Buscar por nombre o email..."
+                                <input type="text" id="userSearch" placeholder="Buscar por nombre, correo, WhatsApp o negocio..."
                                     class="border border-gray-200 rounded-lg pl-8 pr-4 py-2 text-sm focus:ring-2 focus:ring-[#0ea5e9] w-72"
                                     oninput="debounce(()=>loadAdminUsers(),300)()">
                             </div>
@@ -935,7 +938,7 @@
                                     <th class="px-6 py-3 col-hide-mobile">Rol</th>
                                     <th class="px-6 py-3">Estado</th>
                                     <th class="px-6 py-3 col-hide-mobile">Ciudad</th>
-                                    <th class="px-6 py-3 col-hide-mobile">Empresas</th>
+                                    <th class="px-6 py-3 col-hide-mobile">Negocio</th>
                                     <th class="px-6 py-3 col-hide-mobile">&Uacute;ltimo acceso</th>
                                     <th class="px-6 py-3 col-hide-mobile">Registro</th>
                                     <th class="px-6 py-3 text-right">Acciones</th>
@@ -959,12 +962,12 @@
                     <div class="px-6 py-4 border-b border-gray-100 flex flex-wrap gap-3 justify-between items-center">
                         <h3 class="font-bold text-gray-900">Rubros del Directorio</h3>
                         <button onclick="openCategoryForm()" class="btn-brand text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2">
-                            <i class="fas fa-plus"></i> Nueva categor&iacute;a
+                            <i class="fas fa-plus"></i> Nuevo rubro
                         </button>
                     </div>
                     <!-- Form inline -->
                     <div id="categoryFormPanel" class="hidden border-b border-gray-100 p-6 bg-gray-50">
-                        <h4 class="font-bold text-gray-800 mb-4" id="categoryFormTitle">Nueva categor&iacute;a</h4>
+                        <h4 class="font-bold text-gray-800 mb-4" id="categoryFormTitle">Nuevo rubro</h4>
                         <form id="categoryForm" class="grid md:grid-cols-3 gap-4">
                             <input type="hidden" id="catFormId">
                             <div><label class="form-label">Nombre *</label><input type="text" id="catFormName" class="form-input" placeholder="Ej: Restaurantes" required></div>
@@ -994,7 +997,7 @@
                             </div>
                             <div><label class="form-label">Orden display</label><input type="number" id="catFormOrder" class="form-input" placeholder="0" min="0"></div>
                             <div>
-                                <label class="form-label">Categor&iacute;a padre <span class="text-gray-400 font-normal text-xs">(opcional)</span></label>
+                                <label class="form-label">Rubro padre <span class="text-gray-400 font-normal text-xs">(opcional)</span></label>
                                 <select id="catFormParent" class="form-input">
                                     <option value="">— Sin padre (es ra&iacute;z) —</option>
                                 </select>
@@ -1010,7 +1013,7 @@
                         <table class="w-full text-sm text-left">
                             <thead class="bg-gray-50 text-gray-600 font-medium">
                                 <tr>
-                                    <th class="px-6 py-3">Categor&iacute;a</th>
+                                    <th class="px-6 py-3">Rubro</th>
                                     <th class="px-6 py-3">Slug</th>
                                     <th class="px-6 py-3">Padre</th>
                                     <th class="px-6 py-3 text-center">Empresas</th>
@@ -1070,13 +1073,13 @@
                                 </div>
                                 <div>
                                     <label class="form-label mb-1 block">Caracter&iacute;sticas <span class="text-gray-400 font-normal text-xs">(una por l&iacute;nea — se muestran en el sitio público)</span></label>
-                                    <textarea id="planEditFeatures" rows="7" class="form-input font-mono text-sm" placeholder="Perfil básico&#10;1 categoría&#10;Sin destacados"></textarea>
+                                    <textarea id="planEditFeatures" rows="7" class="form-input font-mono text-sm" placeholder="Perfil básico&#10;1 rubro&#10;Sin destacados"></textarea>
                                 </div>
                                 <!-- Límites operativos -->
                                 <div class="border-t border-gray-100 pt-4">
                                     <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Límites operativos</p>
                                     <div class="grid grid-cols-2 gap-3">
-                                        <div><label class="form-label text-xs">Categorías máx.</label><input type="number" id="planEditMaxCategories" min="1" max="20" class="form-input text-sm"></div>
+                                        <div><label class="form-label text-xs">Rubros máx.</label><input type="number" id="planEditMaxCategories" min="1" max="20" class="form-input text-sm"></div>
                                         <div><label class="form-label text-xs">Imágenes galería máx.</label><input type="number" id="planEditMaxGallery" min="0" max="50" class="form-input text-sm"></div>
                                         <div><label class="form-label text-xs">Redes sociales máx.</label><input type="number" id="planEditMaxSocial" min="0" max="10" class="form-input text-sm"></div>
                                         <div><label class="form-label text-xs">Tags máx.</label><input type="number" id="planEditMaxTags" min="0" max="50" class="form-input text-sm"></div>
@@ -1490,7 +1493,7 @@
                                     <label class="form-label">Columna 2 — Título</label>
                                     <input type="text" id="footerCol2TitleInput" class="form-input mb-2" placeholder="Directorio">
                                     <label class="form-label text-xs">Links <span class="text-gray-400 font-normal">(Texto|/url)</span></label>
-                                    <textarea id="footerCol2LinksInput" class="form-input font-mono text-xs" rows="4" placeholder="Buscar empresas|#directorio&#10;Categorías|#categorias"></textarea>
+                                    <textarea id="footerCol2LinksInput" class="form-input font-mono text-xs" rows="4" placeholder="Buscar empresas|#directorio&#10;Rubros|#categorias"></textarea>
                                 </div>
                                 <div>
                                     <label class="form-label">Columna 3 — Título</label>
@@ -1644,7 +1647,7 @@
                                 </div>
                                 <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                                     <input type="checkbox" id="importAutoCategory" class="w-4 h-4 text-[#0ea5e9] rounded" checked>
-                                    <label for="importAutoCategory" class="text-sm text-gray-700">Categorizar automáticamente</label>
+                                    <label for="importAutoCategory" class="text-sm text-gray-700">Asignar rubros automáticamente</label>
                                 </div>
                             </div>
                             <div class="flex gap-3">
@@ -1690,9 +1693,9 @@
                             </div>
                         </div>
                         <div class="bg-blue-50 rounded-2xl border border-blue-100 p-6 text-sm text-blue-700">
-                            <p class="font-bold mb-2"><i class="fas fa-info-circle mr-1"></i> Categorización automática</p>
-                            <p class="text-xs leading-relaxed">RetoPA asigna categorías basándose en el nombre de la empresa y el tipo de registro del MIC. Podés revisar y ajustar las categorías asignadas después de importar.</p>
-                            <p class="font-bold mt-3 mb-1">Categorías disponibles:</p>
+                            <p class="font-bold mb-2"><i class="fas fa-info-circle mr-1"></i> Asignación automática de rubros</p>
+                            <p class="text-xs leading-relaxed">RetoPA asigna rubros basándose en el nombre de la empresa y el tipo de registro del MIC. Podés revisar y ajustar los rubros asignados después de importar.</p>
+                            <p class="font-bold mt-3 mb-1">Rubros disponibles:</p>
                             <div id="importCatList" class="flex flex-wrap gap-1 text-xs"></div>
                         </div>
                     </div>
@@ -2057,8 +2060,8 @@
                     <!-- Tabla principal -->
                     <div class="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                         <div class="px-5 py-4 border-b border-gray-100 flex flex-wrap gap-2 items-center">
-                            <h3 class="font-bold text-gray-900 mr-auto">Demanda por categoría × ciudad</h3>
-                            <input id="semFilterCat"  oninput="renderSemaforoTable()" placeholder="Filtrar categoría…" class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-36">
+                            <h3 class="font-bold text-gray-900 mr-auto">Demanda por rubro × ciudad</h3>
+                            <input id="semFilterCat"  oninput="renderSemaforoTable()" placeholder="Filtrar rubro…" class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-36">
                             <input id="semFilterCity" oninput="renderSemaforoTable()" placeholder="Filtrar ciudad…" class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-32">
                             <select id="semFilterEstado" onchange="renderSemaforoTable()" class="border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
                                 <option value="">Todos</option>
@@ -2071,7 +2074,7 @@
                             <table class="w-full text-sm">
                                 <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
                                     <tr>
-                                        <th class="text-left px-4 py-3">Categoría</th>
+                                        <th class="text-left px-4 py-3">Rubro</th>
                                         <th class="text-left px-4 py-3">Ciudad</th>
                                         <th class="text-center px-3 py-3">Estado</th>
                                         <th class="text-right px-3 py-3" title="Visitas a fichas">Visitas</th>
@@ -2663,7 +2666,7 @@
     <div id="editCategoryModal" class="fixed inset-0 z-[60] hidden">
         <div class="modal-overlay absolute inset-0" onclick="closeModal('editCategoryModal')"></div>
         <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <h3 class="text-lg font-bold text-gray-900 mb-4">Editar categor&iacute;a</h3>
+            <h3 class="text-lg font-bold text-gray-900 mb-4">Editar rubro</h3>
             <form id="editCategoryForm" class="space-y-4">
                 <input type="hidden" id="editCatId">
                 <div><label class="form-label">Nombre</label><input type="text" id="editCatName" required class="form-input"></div>
@@ -2726,6 +2729,8 @@
     <script src="/admin/js/monetization.js"></script>
     <script src="/admin/js/signals.js"></script>
     <script src="/admin/js/claims.js"></script>
+    <script src="/admin/js/claim-funnel.js"></script>
+    <script src="/admin/js/merge.js"></script>
     <script src="/admin/js/prospects.js"></script>
     <script src="/admin/js/achievements.js"></script>
     <script src="/admin/js/uncategorized.js"></script>

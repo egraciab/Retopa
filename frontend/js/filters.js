@@ -26,16 +26,8 @@ function quickSearch(term) {
 let _rpCats = null; // cache de /categories
 function _rpNormCat(s) { return (s || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, ''); }
 
-async function rpOpenCatPicker() {
-    const modal = document.getElementById('catPickerModal');
-    if (!modal) return;
-    modal.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-    const input = document.getElementById('catPickerSearch');
-    if (input) input.value = '';
-    const list = document.getElementById('catPickerList');
+async function rpLoadCats() {
     if (!_rpCats) {
-        if (list) list.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8">Cargando categorías…</div>';
         try {
             const d = await apiGet('/categories');
             _rpCats = (d && d.success && Array.isArray(d.data)) ? d.data.slice() : [];
@@ -43,8 +35,77 @@ async function rpOpenCatPicker() {
             _rpCats.sort((a, b) => (b.businessCount || 0) - (a.businessCount || 0) || String(a.name).localeCompare(String(b.name)));
         } catch (e) { _rpCats = []; }
     }
-    rpRenderCatList('');
+    return _rpCats;
+}
+
+// Nombre visible de un rubro por su slug (para el título y el chip de filtro).
+function rpCatName(slug) {
+    const c = (_rpCats || []).find(x => x.slug === slug);
+    if (c) return c.name;
+    const combo = (window._comboData && window._comboData.cat || []).find(x => x.value === slug);
+    if (combo) return String(combo.label).replace(/^\s*›\s*/, '').trim();
+    return document.querySelector(`[data-slug="${slug}"] h4`)?.textContent || slug;
+}
+
+let _rpPickerOnly = null; // lista acotada de rubros a mostrar (pastilla con varios candidatos)
+async function rpOpenCatPicker(prefill, onlyCats) {
+    _rpPickerOnly = Array.isArray(onlyCats) && onlyCats.length ? onlyCats : null;
+    const modal = document.getElementById('catPickerModal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    const input = document.getElementById('catPickerSearch');
+    if (input) input.value = _rpPickerOnly ? '' : (prefill || '');
+    const list = document.getElementById('catPickerList');
+    if (!_rpCats && list) list.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8">Cargando rubros…</div>';
+    await rpLoadCats();
+    rpRenderCatList(_rpPickerOnly ? '' : (prefill || ''));
     if (input) setTimeout(() => input.focus(), 60);
+}
+
+// Pastillas "Buscá por rubro": filtran por RUBRO, no por texto libre.
+// El término se busca en la lista de rubros (sin tildes, singular/plural):
+//   · coincide con UNO solo → se filtra por ese rubro;
+//   · con varios → se abre "Elegí un rubro" ya filtrado, y elige la persona;
+//   · con ninguno → búsqueda de texto, como antes.
+const _rpStem = s => _rpNormCat(s).replace(/[^a-z0-9]+/g, ' ').trim().split(' ')
+    .map(w => w.length > 4 ? w.replace(/(es|s)$/, '') : w).join(' ');
+// Parecido por trigramas (como pg_trgm.similarity): "Electricista" ↔ "Electricidad" ≈ 0.5.
+function _rpTriSim(a, b) {
+    const tri = s => { const t = '  ' + _rpStem(s) + ' '; const set = new Set(); for (let i = 0; i < t.length - 2; i++) set.add(t.slice(i, i + 3)); return set; };
+    const A = tri(a), B = tri(b); let inter = 0; A.forEach(x => { if (B.has(x)) inter++; });
+    return inter / (A.size + B.size - inter || 1);
+}
+async function rpRubroPick(term) {
+    const cats = (await rpLoadCats()).filter(c => c && c.slug);
+    const t = _rpStem(term);
+    let hits = cats.filter(c => _rpStem(c.name) === t);
+    if (!hits.length) hits = cats.filter(c => (' ' + _rpStem(c.name) + ' ').includes(' ' + t + ' '));
+    // Sin coincidencia de palabra: rubros de nombre parecido (≥ 0.45). Uno → ese
+    // (se ve en el chip "Rubro: …"); varios → que elija la persona.
+    if (!hits.length) hits = cats.filter(c => _rpTriSim(c.name, term) >= 0.45);
+    if (hits.length === 1) return rpApplyRubro(hits[0].slug);
+    if (hits.length > 1) return rpOpenCatPicker(term, hits);
+    // Una pastilla es una búsqueda nueva: se suelta el rubro que hubiera.
+    currentCategory = null;
+    const sel = document.getElementById('categorySelect'); if (sel) sel.value = '';
+    const combo = document.getElementById('catComboInput'); if (combo) combo.value = '';
+    const i = document.getElementById('mainSearch'); if (i) i.value = term;
+    performSearch();
+}
+
+// Aplica un rubro como filtro: limpia el texto libre y lo refleja en el combo.
+function rpApplyRubro(slug) {
+    const i = document.getElementById('mainSearch'); if (i) i.value = '';
+    currentSearch = '';
+    currentCategory = slug;
+    const sel = document.getElementById('categorySelect'); if (sel) sel.value = slug;
+    const combo = document.getElementById('catComboInput'); if (combo) combo.value = rpCatName(slug);
+    document.querySelectorAll('.category-card').forEach(p => p.classList.toggle('active', p.dataset.slug === slug));
+    currentOffset = 0;
+    updateSectionTitle();
+    loadBusinesses(true, 'resultsList');
+    document.getElementById('directorio')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function rpCloseCatPicker() {
@@ -57,10 +118,10 @@ function rpRenderCatList(q) {
     const list = document.getElementById('catPickerList');
     if (!list) return;
     const nq = _rpNormCat(q);
-    const cats = _rpCats || [];
+    const cats = (!nq && _rpPickerOnly) ? _rpPickerOnly : (_rpCats || []);
     const matches = cats.filter(c => c.slug && (!nq || _rpNormCat(c.name).includes(nq)));
     if (!matches.length) {
-        list.innerHTML = '<div style="padding:28px;text-align:center;color:#94a3b8">Sin categorías que coincidan</div>';
+        list.innerHTML = '<div style="padding:28px;text-align:center;color:#94a3b8">Sin rubros que coincidan</div>';
         return;
     }
     list.innerHTML = matches.map(c => {
@@ -78,8 +139,7 @@ function rpRenderCatList(q) {
 
 function rpPickCategory(slug) {
     rpCloseCatPicker();
-    currentCategory = null; // forzar selección (evita el toggle que la limpiaría)
-    if (typeof filterByCategory === 'function') filterByCategory(slug, null);
+    rpApplyRubro(slug);
 }
 
 // ── E3.3b — Chips de filtro sticky (mobile) ───────────────────────────
@@ -159,9 +219,7 @@ function updateSectionTitle() {
     if (currentSearch) {
         titleEl.innerHTML = `Resultados para <span class="text-brand-600">"${escHtml(currentSearch)}"</span>`;
     } else if (currentCategory) {
-        const catEl = document.querySelector(`[data-slug="${currentCategory}"] h4`);
-        const catName = catEl?.textContent || currentCategory;
-        titleEl.textContent = `Empresas — ${catName}`;
+        titleEl.textContent = `Empresas — ${rpCatName(currentCategory)}`;
     } else if (currentCity) {
         titleEl.textContent = `Empresas en ${currentCity}`;
     } else {
@@ -272,8 +330,7 @@ function updateActiveFilters() {
 
     if (currentSearch) filters.push({ text: `Búsqueda: "${currentSearch}"`, type: 'search' });
     if (currentCategory) {
-        const catName = document.querySelector(`[data-slug="${currentCategory}"] h4`)?.textContent || currentCategory;
-        filters.push({ text: `Categoría: ${catName}`, type: 'category' });
+        filters.push({ text: `Rubro: ${rpCatName(currentCategory)}`, type: 'category' });
     }
     if (currentCity) filters.push({ text: `Ciudad: ${currentCity}`, type: 'city' });
     if (document.getElementById('filterVerified')?.checked) filters.push({ text: '✓ Verificados', type: 'verified' });

@@ -119,7 +119,7 @@ function addCatToSelection(catId) {
 
     if (_selectedCatIds.includes(catId)) return;
     if (_selectedCatIds.length >= maxCats) {
-        showToastClient(`Tu plan permite hasta ${maxCats} categoría(s)`, 'error');
+        showToastClient(`Tu plan permite hasta ${maxCats} rubro(s)`, 'error');
         return;
     }
     _selectedCatIds.push(catId);
@@ -147,7 +147,7 @@ function renderCatTags(maxCats) {
         return `<span class="inline-flex items-center gap-1 text-xs bg-brand-100 text-brand-700 px-2.5 py-1 rounded-full font-medium">${escHtml(cat.name)}<button onclick="removeCatFromSelection(${id})" class="ml-1 hover:text-red-500 font-bold" style="line-height:1;font-size:14px">×</button></span>`;
     }).join('');
     const input = document.getElementById('editCatInput');
-    if (input) input.placeholder = _selectedCatIds.length >= maxCats ? `Límite de ${maxCats} alcanzado` : 'Escribí para buscar categoría...';
+    if (input) input.placeholder = _selectedCatIds.length >= maxCats ? `Límite de ${maxCats} alcanzado` : 'Escribí para buscar rubro...';
 }
 
 
@@ -614,18 +614,33 @@ async function saveBizEdit() {
         return;
     }
 
-    // Actualizar datos locales
+    // Actualizar datos locales (sin los cambios que quedaron en revisión — E1)
+    const pending = Array.isArray(res.pending_review) ? res.pending_review : [];
+    const applied = Object.assign({}, payload);
+    pending.forEach(f => { delete applied[f]; });
     const idx = myBusinesses.findIndex(b => b.slug === editingSlug);
-    if (idx >= 0) Object.assign(myBusinesses[idx], payload);
+    if (idx >= 0) Object.assign(myBusinesses[idx], applied);
 
     // Emitir evento de sincronía — si la ficha pública está abierta en esta misma pestaña, se recarga
     window.dispatchEvent(new CustomEvent('retopa:biz:updated', {
         detail: { slug: res.slug || editingSlug }
     }));
 
+    const savedSlug = editingSlug;  // closeEditModal() lo limpia
     closeEditModal();
-    showToastClient('Empresa actualizada correctamente ✅');
+    if (pending.length) {
+        const LBL = { name: 'nombre', trade_name: 'nombre comercial', phone: 'teléfono', whatsapp: 'WhatsApp', email: 'correo' };
+        showToastClient(`Guardado. El cambio de ${pending.map(f => LBL[f] || f).join(', ')} lo revisamos y te avisamos.`);
+    } else {
+        showToastClient('Empresa actualizada correctamente ✅');
+    }
     renderBusinessList();
+
+    // Refrescar desde el servidor: la completitud (aro, %) y los datos que ve el
+    // Dashboard los calcula el backend. Antes se volvía al Dashboard con lo viejo.
+    if (res.slug && typeof activeDashBiz !== 'undefined' && activeDashBiz === savedSlug) activeDashBiz = res.slug;
+    if (typeof reloadMyBusinesses === 'function') await reloadMyBusinesses();
+    if (typeof _currentSection !== 'undefined' && _currentSection === 'dashboard' && typeof loadDashboard === 'function') loadDashboard();
 }
 
 // ── Gestión de galería ────────────────────────────────────────────────────

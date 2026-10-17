@@ -23,7 +23,7 @@ function updateBizSortArrows() {
 async function downloadAdminKits() {
     const category = document.getElementById('bizFilterCategory')?.value || '';
     const city     = document.getElementById('bizFilterCity')?.value || '';
-    if (!category && !city) { showToast('Filtrá por categoría y/o ciudad para bajar los kits (tope 100)', 'error'); return; }
+    if (!category && !city) { showToast('Filtrá por rubro y/o ciudad para bajar los kits (tope 100)', 'error'); return; }
     const qs = new URLSearchParams();
     if (category) qs.set('category', category);
     if (city)     qs.set('city', city);
@@ -285,7 +285,7 @@ async function openBusinessModal(id) {
             </div>
             <div class="grid md:grid-cols-2 gap-4">
                 <div>
-                    <label class="form-label">Categor&iacute;as <span class="text-xs text-gray-400 font-normal">(la primera es la primaria)</span></label>
+                    <label class="form-label">Rubros <span class="text-xs text-gray-400 font-normal">(el primero es el principal)</span></label>
                     <div id="catChipsWrap" class="border border-gray-200 rounded-xl p-2 flex flex-wrap gap-1.5 min-h-[42px] bg-white"></div>
                     <select id="catChipsAdd" class="form-input mt-2" onchange="addCatChip(this.value); this.value=''"></select>
                     <p id="catChipsHint" class="text-xs text-gray-400 mt-1"></p>
@@ -677,7 +677,7 @@ function renderCatChips() {
     if (_bizCatIds.length > max) _bizCatIds = _bizCatIds.slice(0, max);
 
     wrap.innerHTML = _bizCatIds.length === 0
-        ? '<span class="text-xs text-gray-400 py-1.5">Sin categorías asignadas</span>'
+        ? '<span class="text-xs text-gray-400 py-1.5">Sin rubros asignados</span>'
         : _bizCatIds.map((id, i) => {
             const c = (typeof getCategoryById === 'function') ? getCategoryById(id) : null;
             const name = c ? c.name : `#${id}`;
@@ -691,10 +691,10 @@ function renderCatChips() {
 
     const atMax = _bizCatIds.length >= max;
     sel.disabled = atMax;
-    sel.innerHTML = `<option value="">${atMax ? `Límite alcanzado (${max})` : '+ Agregar categoría...'}</option>` +
+    sel.innerHTML = `<option value="">${atMax ? `Límite alcanzado (${max})` : '+ Agregar rubro...'}</option>` +
         ((typeof buildCategoryGroupedHtml === 'function') ? buildCategoryGroupedHtml(null, new Set(_bizCatIds)) : '');
 
-    hint.textContent = `Plan ${planType}: hasta ${max} categoría(s) · ${_bizCatIds.length}/${max} usadas` + (max > 1 ? ' · La primera es la primaria ⭐' : '');
+    hint.textContent = `Plan ${planType}: hasta ${max} rubro(s) · ${_bizCatIds.length}/${max} usados` + (max > 1 ? ' · El primero es el principal ⭐' : '');
 }
 
 function addCatChip(id) {
@@ -703,7 +703,7 @@ function addCatChip(id) {
     const planType = document.querySelector('[name=plan_type]')?.value || 'basic';
     const max = (typeof getMaxCategoriesForPlan === 'function') ? getMaxCategoriesForPlan(planType) : 1;
     if (_bizCatIds.length >= max) {
-        showToast(`Tu plan permite hasta ${max} categoría(s)`, 'warn');
+        showToast(`Tu plan permite hasta ${max} rubro(s)`, 'warn');
         return;
     }
     _bizCatIds.push(idNum);
@@ -774,9 +774,9 @@ function openNewBusinessModal() {
                     <div><label class="form-label">Dirección</label><input type="text" name="address" class="form-input"></div>
                 </div>
                 <div>
-                    <label class="form-label">Categoría</label>
+                    <label class="form-label">Rubro</label>
                     <select name="category_id" class="form-input" id="newBizCategory">
-                        <option value="">Seleccioná una categoría...</option>
+                        <option value="">Seleccioná un rubro...</option>
                     </select>
                 </div>
                 <div class="flex items-center gap-3">

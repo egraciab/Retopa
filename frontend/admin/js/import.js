@@ -92,7 +92,7 @@ async function loadAdminPlans() {
             </div>
             <!-- Resumen de límites -->
             <div class="bg-blue-50 rounded-xl p-3 mb-4 text-xs text-blue-700 space-y-1">
-                <div class="flex justify-between"><span>Categorías</span><strong>${p.max_categories??1}</strong></div>
+                <div class="flex justify-between"><span>Rubros</span><strong>${p.max_categories??1}</strong></div>
                 <div class="flex justify-between"><span>Imágenes galería</span><strong>${p.max_gallery??0}</strong></div>
                 <div class="flex justify-between"><span>Redes sociales</span><strong>${p.max_social??0}</strong></div>
                 <div class="flex gap-2 flex-wrap pt-1">

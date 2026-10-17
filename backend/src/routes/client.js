@@ -425,12 +425,15 @@ async function upsertPlanLead(c, note) {
 // ── GET /client/me ── Perfil del usuario actual ───────────────────────────
 router.get('/me', async (req, res) => {
     try {
-        const result = await pool.query(
-            'SELECT id, name, email, phone, city, role, is_active, mfa_enabled, created_at FROM users WHERE id=$1',
-            [req.user.id]
-        );
+        const result = await pool.query('SELECT * FROM users WHERE id=$1', [req.user.id]);
         if (!result.rows.length) return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
-        res.json({ success: true, data: result.rows[0] });
+        const u = result.rows[0];
+        res.json({ success: true, data: {
+            id: u.id, name: u.name, email: u.email, phone: u.phone, city: u.city, role: u.role,
+            is_active: u.is_active, mfa_enabled: u.mfa_enabled, created_at: u.created_at,
+            // 2026-10-13: ¿eligió contraseña? (los que reclamaron por enlace, no)
+            has_password: u.password_set_at === undefined ? true : !!u.password_set_at,
+        }});
     } catch(err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
@@ -438,20 +441,26 @@ router.get('/me', async (req, res) => {
 router.put('/me', async (req, res) => {
     try {
         const { name, phone, city, password, currentPassword } = req.body;
-        const user = await pool.query('SELECT id, password_hash FROM users WHERE id=$1', [req.user.id]);
+        const user = await pool.query('SELECT * FROM users WHERE id=$1', [req.user.id]);
         if (!user.rows.length) return res.status(404).json({ success: false });
+        // Sin contraseña elegida (reclamó por enlace) → CREA la primera sin "actual".
+        const hasPwd = user.rows[0].password_set_at === undefined ? true : !!user.rows[0].password_set_at;
 
         let updates = [], params = [], idx = 1;
         if (name)  { updates.push(`name=$${idx++}`);  params.push(name); }
         if (phone) { updates.push(`phone=$${idx++}`); params.push(phone); }
         if (city !== undefined) { updates.push(`city=$${idx++}`); params.push(city || null); }
         if (password) {
-            if (!currentPassword) return res.status(400).json({ success: false, error: 'Ingresá tu contraseña actual' });
-            const valid = await bcrypt.compare(currentPassword, user.rows[0].password_hash);
-            if (!valid) return res.status(400).json({ success: false, error: 'Contraseña actual incorrecta' });
+            if (String(password).length < 8) return res.status(400).json({ success: false, error: 'La contraseña debe tener al menos 8 caracteres' });
+            if (hasPwd) {
+                if (!currentPassword) return res.status(400).json({ success: false, error: 'Ingresá tu contraseña actual' });
+                const valid = await bcrypt.compare(currentPassword, user.rows[0].password_hash);
+                if (!valid) return res.status(400).json({ success: false, error: 'Contraseña actual incorrecta' });
+            }
             const hash = await bcrypt.hash(password, 10);
             updates.push(`password_hash=$${idx++}`);
             params.push(hash);
+            if (user.rows[0].password_set_at !== undefined) updates.push(`password_set_at=NOW()`);
         }
         if (!updates.length) return res.status(400).json({ success: false, error: 'Nada que actualizar' });
         updates.push(`updated_at=NOW()`);
@@ -756,7 +765,7 @@ router.put('/businesses/:slug', async (req, res) => {
         const { slug } = req.params;
         // Verificar que el usuario es dueño o puede editar
         const check = await conn.query(`
-            SELECT b.id, b.plan_type FROM businesses b
+            SELECT b.* FROM businesses b
             JOIN user_businesses ub ON ub.business_id=b.id
             WHERE b.slug=$1 AND ub.user_id=$2 AND ub.can_edit=TRUE
         `, [slug, req.user.id]);
@@ -765,12 +774,49 @@ router.put('/businesses/:slug', async (req, res) => {
         const bizId = check.rows[0].id;
         const planType = check.rows[0].plan_type || 'basic';
 
-        const { name, trade_name, description, kit_cta, phone: rawPhone, whatsapp: rawWhatsapp, email, website, address, city, hours, hours_json, tags, lat, lng, category_ids,
+        let { name, trade_name, description, kit_cta, phone: rawPhone, whatsapp: rawWhatsapp, email, website, address, city, hours, hours_json, tags, lat, lng, category_ids,
                 social_instagram, social_facebook, social_tiktok, social_linkedin, social_twitter, social_youtube } = req.body;
 
         // Normalizar teléfonos al guardar
-        const phone    = normalizePhone(rawPhone);
-        const whatsapp = normalizePhone(rawWhatsapp) || phone;
+        let phone    = normalizePhone(rawPhone);
+        let whatsapp = normalizePhone(rawWhatsapp) || phone;
+
+        // E1 (2026-10-13) — Reclamo automático por enlace y AÚN no revisado: los
+        // cambios SENSIBLES (nombre, teléfono, WhatsApp, correo de la ficha) no se
+        // aplican; van a revisión con su valor anterior. El resto se guarda al toque.
+        const cur = check.rows[0];
+        const pendingReview = [];
+        if (cur.claim_method === 'token' && !cur.claim_reviewed_at && cur.claim_status === 'approved') {
+            // Comparar lo EFECTIVO (el formulario manda todos los campos en cada
+            // guardado, con formatos de teléfono distintos): solo cuenta un cambio real.
+            const dig = v => String(normalizePhone(v == null ? '' : String(v)) || '').replace(/\D/g, '');
+            const txt = v => String(v == null ? '' : v).trim();
+            const proposed = {
+                name:       name === undefined ? undefined : [txt(name), txt(cur.name)],
+                trade_name: trade_name === undefined ? undefined : [txt(trade_name), txt(cur.trade_name)],
+                phone:      rawPhone === undefined ? undefined : [dig(phone), dig(cur.phone)],
+                whatsapp:   (rawWhatsapp === undefined && rawPhone === undefined) ? undefined
+                            : [dig(whatsapp), dig(cur.whatsapp || cur.phone)],
+                email:      email === undefined ? undefined : [txt(email).toLowerCase(), txt(cur.email).toLowerCase()],
+            };
+            const newVal = { name, trade_name, phone, whatsapp, email };
+            for (const [field, cmp] of Object.entries(proposed)) {
+                if (cmp === undefined) continue;
+                const val = newVal[field];
+                if (cmp[0] !== cmp[1]) {
+                    await conn.query(
+                        `UPDATE owner_change_requests SET status='rejected', decided_at=NOW()
+                          WHERE business_id=$1 AND field=$2 AND status='pending'`, [bizId, field]);
+                    await conn.query(
+                        `INSERT INTO owner_change_requests (business_id, user_id, field, old_value, new_value)
+                         VALUES ($1, $2, $3, $4, $5)`,
+                        [bizId, req.user.id, field, cur[field] == null ? null : String(cur[field]), val == null ? null : String(val)]);
+                    pendingReview.push(field);
+                }
+            }
+            // Ninguno de los sensibles se toca en este guardado.
+            name = undefined; trade_name = undefined; phone = undefined; whatsapp = undefined; email = undefined;
+        }
 
         // Validar set de categorías si vino
         let catIds = null;
@@ -780,7 +826,7 @@ router.put('/businesses/:slug', async (req, res) => {
             if (catIds.length > limits.max_categories) {
                 return res.status(400).json({
                     success: false,
-                    error: `Tu plan permite hasta ${limits.max_categories} categoría(s); enviaste ${catIds.length}`,
+                    error: `Tu plan permite hasta ${limits.max_categories} rubro(s); enviaste ${catIds.length}`,
                     code: 'CATEGORY_LIMIT_EXCEEDED'
                 });
             }
@@ -836,7 +882,10 @@ router.put('/businesses/:slug', async (req, res) => {
         if (social_twitter   !== undefined) { updates.push(`social_twitter=$${idx++}`);   params.push(social_twitter   || null); }
         if (social_youtube   !== undefined) { updates.push(`social_youtube=$${idx++}`);   params.push(social_youtube   || null); }
 
-        if (!updates.length && catIds === null) return res.status(400).json({ success: false, error: 'Nada que actualizar' });
+        if (!updates.length && catIds === null) {
+            if (pendingReview.length) return res.json({ success: true, slug, pending_review: pendingReview });
+            return res.status(400).json({ success: false, error: 'Nada que actualizar' });
+        }
 
         await conn.query('BEGIN');
 
@@ -890,7 +939,7 @@ router.put('/businesses/:slug', async (req, res) => {
         try { await redisClient.del('dir:categories:all'); } catch(e) {}
         try { await redisClient.del('dir:popular'); } catch(e) {}
 
-        res.json({ success: true, slug: returnedSlug, boost_granted: boostGranted });
+        res.json({ success: true, slug: returnedSlug, boost_granted: boostGranted, pending_review: pendingReview });
     } catch(err) {
         try { await conn.query('ROLLBACK'); } catch(_) {}
         res.status(500).json({ success: false, error: err.message });

@@ -7,6 +7,15 @@ const rateLimit  = require('express-rate-limit');
 const pool       = require('../db');
 
 const JWT_SECRET  = require('../config/jwt');
+const { mobilePY } = require('../helpers/claimFlow');
+const { sendEmail } = require('../config/mail');
+const { siteInfo, mintAccessLink, supportWhatsApp, findUsersByPhone } = require('../helpers/accessLink');
+
+// password_set_at (2026-10-13): marca que el usuario ELIGIÓ una contraseña.
+// Best-effort: si la migración aún no corrió, no rompe el registro/reset.
+function markPasswordSet(userId) {
+  return pool.query('UPDATE users SET password_set_at = NOW() WHERE id = $1', [userId]).catch(() => {});
+}
 
 // ── SEGURIDAD: rate-limit contra fuerza bruta en endpoints de credenciales ────
 // (el límite general de la API es 300/min; acá vamos mucho más estricto por IP).
@@ -250,6 +259,7 @@ router.post('/register', sensitiveLimiter, async (req, res) => {
       [email.toLowerCase(), hash, name.trim(), phone || null, 'user']
     );
     const user  = result.rows[0];
+    await markPasswordSet(user.id);
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, loginAt: nowSec() }, JWT_SECRET, { expiresIn: getTokenExpiry(user.role) });
 
     // VERIFICACIÓN DE CORREO: enviamos el link mágico y NO enganchamos fichas
@@ -325,9 +335,10 @@ router.post('/activate-account', sensitiveLimiter, async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     await pool.query(
-      'UPDATE users SET password_hash=$1, email_verified=TRUE, verify_token=NULL, verify_token_expires=NULL WHERE id=$2',
+      'UPDATE users SET password_hash=$1, email_verified=TRUE, verify_token=NULL, verify_token_expires=NULL WHERE id=$2 RETURNING id',
       [hash, user.id]
     );
+    await markPasswordSet(user.id);
 
     // ENGANCHE: ahora sí, asigna las fichas huérfanas con este correo.
     const linked = await linkOrphanBusinessesByEmail(user.id, user.email);
@@ -366,20 +377,113 @@ router.post('/resend-verification', sensitiveLimiter, async (req, res) => {
 });
 
 // ── POST /login ──────────────────────────────────────────────────────────────
+// ── POST /access-link ── E1: entrar con el LINK DE ACCESO de un solo uso ─────
+// Lo genera el admin (Claims / Usuarios) y se manda por WhatsApp a quien no tiene
+// contraseña (identidad por WhatsApp). Se guarda solo el hash; vence a los 7 días
+// y se consume al usarlo. Devuelve la misma sesión que el login.
+router.post('/access-link', sensitiveLimiter, async (req, res) => {
+  try {
+    const raw = String((req.body && req.body.token) || '');
+    if (!/^[a-f0-9]{64}$/.test(raw)) return res.status(400).json({ success: false, error: 'Enlace inválido' });
+    const hash = require('crypto').createHash('sha256').update(raw).digest('hex');
+    const r = await pool.query(
+      `UPDATE users SET access_token_hash = NULL, access_token_expires = NULL
+        WHERE access_token_hash = $1 AND access_token_expires > NOW() AND is_active = TRUE
+        RETURNING id, email, name, role, is_ambassador, email_verified`, [hash]);
+    if (!r.rows.length) return res.status(401).json({ success: false, error: 'Este enlace de acceso venció o ya se usó. Pedinos uno nuevo por WhatsApp.' });
+    const user = r.rows[0];
+    const isAmb = !!user.is_ambassador;
+    const hasBiz = (await pool.query(
+      'SELECT EXISTS(SELECT 1 FROM user_businesses WHERE user_id=$1 AND is_owner=TRUE) AS h', [user.id])).rows[0].h;
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role, is_ambassador: isAmb, loginAt: nowSec() },
+      JWT_SECRET, { expiresIn: getTokenExpiry(user.role) });
+    res.json({ success: true, token,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, is_ambassador: isAmb, email_verified: !!user.email_verified, has_business: hasBiz } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── POST /access-request ── "Entrar sin contraseña" (2026-10-13) ─────────────
+//  · Correo  → si hay cuenta, le mandamos un LINK DE ACCESO de un uso (7 días).
+//  · WhatsApp → queda el pedido para el admin (Claims → "Pedidos de acceso") y el
+//    navegador abre el WhatsApp de RetoPA con el mensaje armado: es el dueño quien
+//    inicia la conversación. (Si además tiene correo, le llega el link solo.)
+//  Siempre responde lo mismo, exista o no la cuenta (no revela quién está registrado).
+// Límite propio por IDENTIFICADOR + IP (no compartido con registro/reset y no solo
+// por IP: las operadoras móviles comparten IP entre miles de clientes).
+const accessReqLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: req => `${String((req.body && req.body.identifier) || '').replace(/\s/g, '').toLowerCase().slice(0, 80)}|${req.ip}`,
+  message: { success: false, error: 'Ya recibimos tu pedido. Probá de nuevo en unos minutos.' } });
+router.post('/access-request', accessReqLimiter, async (req, res) => {
+  try {
+    const ident = String((req.body && req.body.identifier) || '').trim();
+    const { siteName, siteUrl } = await siteInfo(pool);
+    const mailLink = async (u) => {
+      if (!u || !u.email) return;
+      const url = await mintAccessLink(pool, u.id, siteUrl);
+      if (url) sendEmail(u.email, 'accessLink', { name: u.name, url, siteName, siteUrl }).catch(() => {});
+    };
+
+    if (ident.includes('@')) {
+      const r = await pool.query(
+        `SELECT id, email, name FROM users WHERE lower(email) = $1 AND is_active = TRUE AND role NOT IN ('admin','godmode')`,
+        [ident.toLowerCase()]);
+      await mailLink(r.rows[0]);
+      return res.json({ success: true, mode: 'email',
+        message: 'Si hay una cuenta con ese correo, te llega un enlace para entrar (vale 7 días).' });
+    }
+
+    const wa = mobilePY(ident);
+    if (!wa) return res.status(400).json({ success: false, error: 'Revisá tu número de WhatsApp (ej: 981 123 456).' });
+    const cands = await findUsersByPhone(pool, wa).catch(() => []);
+    const u = cands[0] || null;
+    await pool.query('INSERT INTO access_requests (user_id, phone) VALUES ($1, $2)', [u ? u.id : null, '+' + wa])
+      .catch(e => console.warn('[access-request]', e.message));
+    await mailLink(u && u.email ? u : null);
+    const support = await supportWhatsApp(pool);
+    const pretty = `+595 ${wa.slice(3, 6)} ${wa.slice(6, 9)} ${wa.slice(9)}`;
+    res.json({ success: true, mode: 'whatsapp', support_wa: support,
+      wa_message: `Hola ${siteName}, quiero entrar a mi panel. Mi WhatsApp es ${pretty}.` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/login', loginLimiter, async (req, res) => {
   try {
+    // 2026-10-13: el identificador puede ser el CORREO o el WHATSAPP (celular PY).
     const { email, password } = req.body;
-    const result = await pool.query(
-      'SELECT id, email, name, role, is_ambassador, password_hash, is_active, mfa_enabled, email_verified FROM users WHERE email = $1',
-      [email.toLowerCase()]
-    );
-    if (!result.rows.length || !result.rows[0].is_active)
-      return res.status(401).json({ success: false, error: 'Credenciales inválidas o cuenta inactiva' });
+    const ident = String(email || '').trim();
+    const pwd = String(password || '');
+    const NO_PWD = { success: false, code: 'NO_PASSWORD',
+      error: 'Todavía no creaste una contraseña. Entrá sin contraseña con el botón de abajo.' };
+    let user = null;
 
-    const user = result.rows[0];
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid)
-      return res.status(401).json({ success: false, error: 'Credenciales inválidas' });
+    if (ident.includes('@')) {
+      const result = await pool.query('SELECT * FROM users WHERE email = $1', [ident.toLowerCase()]);
+      if (!result.rows.length || !result.rows[0].is_active)
+        return res.status(401).json({ success: false, error: 'Credenciales inválidas o cuenta inactiva' });
+      user = result.rows[0];
+      const valid = pwd ? await bcrypt.compare(pwd, user.password_hash) : false;
+      if (!valid) {
+        if (user.password_set_at === null && !['admin', 'godmode'].includes(user.role)) return res.status(401).json(NO_PWD);
+        return res.status(401).json({ success: false, error: 'Credenciales inválidas' });
+      }
+    } else {
+      const wa = mobilePY(ident);
+      if (!wa) return res.status(400).json({ success: false, error: 'Revisá tu número de WhatsApp (ej: 981 123 456).' });
+      const cands = await findUsersByPhone(pool, wa).catch(() => []);
+      if (!cands.length) return res.status(401).json({ success: false, error: 'Credenciales inválidas o cuenta inactiva' });
+      for (const c of cands) {
+        if (c.password_set_at && pwd && await bcrypt.compare(pwd, c.password_hash)) { user = c; break; }
+      }
+      if (!user) {
+        if (cands.every(c => !c.password_set_at)) return res.status(401).json(NO_PWD);
+        return res.status(401).json({ success: false, error: 'Credenciales inválidas' });
+      }
+    }
 
     // 2FA activo → enviar OTP y pedir verificación
     if (user.mfa_enabled) {
@@ -534,6 +638,7 @@ router.post('/reset-password', sensitiveLimiter, async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     await pool.query('UPDATE users SET password_hash=$1, reset_token=NULL, reset_token_expires=NULL WHERE id=$2', [hash, result.rows[0].id]);
+    await markPasswordSet(result.rows[0].id);
     res.json({ success: true, message: 'Contraseña actualizada correctamente' });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });

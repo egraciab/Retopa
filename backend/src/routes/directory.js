@@ -6,6 +6,7 @@ const { getPlanLimits } = require('../utils/plan-limits');
 const { sendEmail } = require('../config/mail');
 const { getPwaIcon } = require('../utils/pwa-icon');
 const { provisionFichaOwnerActivation } = require('../helpers/fichaActivation');
+const { logClaimEvent } = require('../utils/claimEvents');
 
 // ── Íconos PWA dinámicos (desde site_config.logo_url; fallback bundleado) ──
 router.get(['/pwa-icon-192.png', '/pwa-icon-512.png', '/pwa-icon-180.png'], async (req, res) => {
@@ -298,13 +299,30 @@ router.get('/businesses', async (req, res) => {
                             // (Antes se reusaba idx-2, frágil cuando había category+city.)
                             params.push(qEff);
                             const pQ = idx; idx++;
+                            // Relevancia en escalones y, DENTRO de cada escalón: plan pago,
+                            // verificada, completitud, rating. (2026-10-14: antes "verificada"
+                            // no pesaba, y el rubro tampoco contaba como coincidencia.)
+                            //   0 = nombre exacto
+                            //   1 = el nombre empieza con lo buscado o lo contiene como palabra,
+                            //       o su RUBRO coincide (nombre del rubro parecido ≥ 0.45:
+                            //       "Electricista" ↔ "Electricidad" = 0.53)
+                            //   2 = el resto de lo que encontró la búsqueda
                             orderBy = `ORDER BY
-                                CASE WHEN lower(unaccent(b.name))=lower(unaccent($${pQ})) THEN 0
-                                     WHEN lower(unaccent(b.name)) LIKE lower(unaccent($${pQ}))||'%' THEN 1
+                                CASE WHEN lower(unaccent(COALESCE(b.trade_name,b.name)))=lower(unaccent($${pQ}))
+                                       OR lower(unaccent(b.name))=lower(unaccent($${pQ})) THEN 0
+                                     WHEN lower(unaccent(b.name)) LIKE lower(unaccent($${pQ}))||'%'
+                                       OR lower(unaccent(COALESCE(b.trade_name,b.name))) LIKE lower(unaccent($${pQ}))||'%'
+                                       OR (' '||regexp_replace(lower(unaccent(b.name)),'[^a-z0-9]+',' ','g')||' ') LIKE '% '||lower(unaccent($${pQ}))||' %'
+                                       OR EXISTS (SELECT 1 FROM business_categories bcr JOIN categories cr ON cr.id = bcr.category_id
+                                                   WHERE bcr.business_id = b.id
+                                                     AND similarity(lower(unaccent(cr.name)), lower(unaccent($${pQ}))) >= 0.45)
+                                       OR EXISTS (SELECT 1 FROM categories cr2 WHERE cr2.id = b.category_id
+                                                     AND similarity(lower(unaccent(cr2.name)), lower(unaccent($${pQ}))) >= 0.45) THEN 1
                                      ELSE 2 END,
                                 CASE b.plan_type WHEN 'premium' THEN 0 WHEN 'featured' THEN 1 ELSE 2 END,
-                                b.rating DESC, b.review_count DESC,
-                                fn_quality_score(b.*) DESC`;
+                                COALESCE(b.verified, FALSE) DESC,
+                                fn_quality_score(b.*) DESC,
+                                b.rating DESC, b.review_count DESC, b.id ASC`;
                         } else {
                             // S30 — empujón de visibilidad: dentro de cada tier de plan, las fichas
                             // con boost activo suben. No altera el orden entre planes (pagos primero).
@@ -406,7 +424,7 @@ router.post('/businesses', async (req, res) => {
         if (catIds.length > limits.max_categories) {
             return res.status(400).json({
                 success: false,
-                error: `El plan ${plan_type} permite hasta ${limits.max_categories} categoría(s); enviaste ${catIds.length}`,
+                error: `El plan ${plan_type} permite hasta ${limits.max_categories} rubro(s); enviaste ${catIds.length}`,
                 code: 'CATEGORY_LIMIT_EXCEEDED'
             });
         }
@@ -585,9 +603,16 @@ router.get('/businesses/:slug', async (req, res) => {
                 // mismo RUC). Mapear por RUC al ÚNICO negocio activo con ese RUC.
                 // Seguro: nunca cae en otro negocio (RUC distinto) y si hay ambigüedad
                 // (0 ó >1 activos con ese RUC) no resuelve.
-                const prev = await pool.query('SELECT ruc FROM businesses WHERE slug = $1 LIMIT 1', [slug]);
+                const prev = await pool.query('SELECT ruc, merged_into FROM businesses WHERE slug = $1 LIMIT 1', [slug]).catch(
+                    () => pool.query('SELECT ruc FROM businesses WHERE slug = $1 LIMIT 1', [slug]));
                 const ruc = prev.rows[0] && prev.rows[0].ruc;
-                if (ruc) {
+                // Ficha FUSIONADA (duplicado de un alta): su link lleva a la que quedó.
+                const into = prev.rows[0] && prev.rows[0].merged_into;
+                if (into) {
+                    const act = await pool.query('SELECT slug FROM businesses WHERE id = $1 AND is_active = TRUE', [into]);
+                    if (act.rows.length) result = await pool.query(BIZ_QUERY, [act.rows[0].slug]);
+                }
+                if (!result.rows.length && ruc) {
                     const act = await pool.query('SELECT slug FROM businesses WHERE ruc = $1 AND is_active = TRUE', [ruc]);
                     if (act.rows.length === 1) result = await pool.query(BIZ_QUERY, [act.rows[0].slug]);
                 }
@@ -785,7 +810,14 @@ router.post('/businesses/:slug/reviews', async (req, res, next) => {
 // ============================================
 router.post('/leads', async (req, res) => {
     try {
-        const { plan_type, name, ruc, category_id, description, phone, email, address, city, website, contact_name, contact_email, image_url, user_id } = req.body;
+        const { plan_type, name, ruc, category_id, description, phone, email, address, city, website, contact_name, contact_email, image_url } = req.body;
+        // SEGURIDAD (2026-10-17): el user_id ya NO se toma del body (cualquiera podía
+        // dar de alta una ficha a nombre de otra cuenta). Solo de una sesión válida.
+        let user_id = null;
+        try {
+            const t = (req.headers.authorization || '').replace('Bearer ', '').trim();
+            if (t) { const d = require('jsonwebtoken').verify(t, require('../config/jwt')); if (d && d.id) user_id = d.id; }
+        } catch (e) { user_id = null; }
         if (!name || !phone || !email || !contact_name || !contact_email) {
             return res.status(400).json({ success: false, error: 'Campos requeridos faltantes' });
         }
@@ -922,7 +954,7 @@ router.post('/leads', async (req, res) => {
                     pool, sendEmail,
                     email: contact_email, name: contact_name,
                     businessId: business.id, businessName: name,
-                    siteName, siteUrl, businessUrl: bizPublicUrl,
+                    siteName, siteUrl, businessUrl: bizPublicUrl, phone,
                 });
                 activationSent = !!(r && r.sentActivation);
             } catch (e) { console.error('[Ficha activation]', e.message); }
@@ -1049,7 +1081,7 @@ router.get('/plans', async (req, res) => {
   } catch (err) {
     // Si la tabla no existe aún, devolver datos por defecto
     res.json({ success: true, data: [
-      { id: 'basic',    name: 'Ficha Básica',    subtitle: 'Para empezar a aparecer',          price: 0,      is_featured: false, button_label: 'Registrar gratis', features: ['Ficha en el directorio','Datos de contacto','1 categoría'] },
+      { id: 'basic',    name: 'Ficha Básica',    subtitle: 'Para empezar a aparecer',          price: 0,      is_featured: false, button_label: 'Registrar gratis', features: ['Ficha en el directorio','Datos de contacto','1 rubro'] },
       { id: 'featured', name: 'Negocio Digital', subtitle: 'Todo lo que necesitás para vender', price: 299000, is_featured: true,  button_label: 'Empezar ahora',    features: ['Ficha destacada','Sitio web profesional','CRM básico'] },
       { id: 'premium',  name: 'Empresa Pro',     subtitle: 'Suite completa sin límites',        price: 599000, is_featured: false, button_label: 'Contactar ventas', features: ['Todo lo de Negocio Digital','ERP completo','CRM ilimitado'] },
     ]});
@@ -1178,8 +1210,11 @@ router.post('/businesses/:slug/claim', async (req, res) => {
         if (!bizResult.rows.length) return res.status(404).json({ success: false, error: 'Empresa no encontrada' });
         const biz = bizResult.rows[0];
 
-        if (biz.verified) {
-            return res.status(400).json({ success: false, error: 'Esta empresa ya fue verificada' });
+        // "Verificada" (RetoPA chequeó los datos) NO es "tiene dueño": una ficha
+        // verificada sin dueño se puede reclamar. Lo que bloquea es que ya tenga dueño.
+        const owned = await pool.query('SELECT 1 FROM user_businesses WHERE business_id=$1 AND is_owner LIMIT 1', [biz.id]);
+        if (owned.rows.length) {
+            return res.status(409).json({ success: false, error: 'Esta empresa ya tiene dueño en RetoPA.' });
         }
         if (biz.claim_status === 'approved') {
             return res.status(409).json({ success: false, error: 'Esta empresa ya fue reclamada.' });
@@ -1212,6 +1247,7 @@ router.post('/businesses/:slug/claim', async (req, res) => {
         } finally {
             client.release();
         }
+        logClaimEvent(pool, { event: 'submit_ok', canal: 'ficha', businessId: biz.id });
 
         try { await invalidateCache('dir:biz:*'); } catch (e) {}
 

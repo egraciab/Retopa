@@ -23,7 +23,7 @@ const SIG_THRESH = [
   { key:'signal_t3_days', label:'T3 · boost vencido ≤ (días)', type:'number' },
   { key:'signal_t4_enabled', label:'T4 · habilitado', type:'bool' },
   { key:'signal_t4_days_before', label:'T4 · días antes de vencer', type:'number' },
-  { key:'signal_t5_categories', label:'T5 · categorías (slugs)', type:'text' },
+  { key:'signal_t5_categories', label:'T5 · rubros (slugs)', type:'text' },
   { key:'signal_t5_wa', label:'T5 · clics WA 30d ≥', type:'number' },
   { key:'signal_t5_active_days', label:'T5 · actividad (días)', type:'number' },
   { key:'signal_t6_completion', label:'T6 · completitud < (%)', type:'number' },

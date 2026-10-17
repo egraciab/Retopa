@@ -764,6 +764,71 @@ function openGalleryLightbox(startIdx) {
     document.body.appendChild(lb);
 }
 
+// ── Hojas de producto / promo (2026-10-15) ──────────────────────────────────
+// Bug en iPhone: la hoja medía 92vh, pero en Safari "vh" es el alto SIN las barras
+// del navegador → la parte de arriba (X y Compartir) quedaba fuera de la pantalla
+// y no había cómo salir. Ahora:
+//   · el alto sale del área VISIBLE (visualViewport) y la imagen se achica si no
+//     entra: la cabecera y los botones siempre se ven;
+//   · arrastrar hacia abajo desde el asa o la cabecera la cierra;
+//   · el "atrás" del celular (o el gesto de volver) la cierra, en vez de salir.
+function rpSheetFit(panel) {
+    if (!panel || !panel.isConnected) return;
+    const vv = window.visualViewport;
+    const h = Math.round(vv ? vv.height : window.innerHeight);
+    panel.style.maxHeight = Math.round(h * 0.94) + 'px';
+    const box = panel.querySelector('[data-sheet-img]');
+    if (box) {
+        const mh = Math.round(h * 0.42) + 'px';
+        box.style.maxHeight = mh;
+        const im = box.querySelector('img'); if (im) im.style.maxHeight = mh;
+    }
+}
+function rpSheetEnhance(drawer, panel, isMobile, closeFn) {
+    if (!drawer || !panel) return;
+    // "Atrás" cierra la hoja: una entrada de historial propia (misma URL).
+    try {
+        if (history.state && history.state.rpSheet) history.replaceState(history.state, '', location.href);
+        else history.pushState(Object.assign({}, history.state || {}, { rpSheet: 1 }), '', location.href);
+    } catch (e) {}
+    if (!isMobile) return;
+    rpSheetFit(panel);
+    drawer._fit = () => rpSheetFit(panel);
+    (window.visualViewport || window).addEventListener('resize', drawer._fit);
+    // Arrastrar hacia abajo para cerrar.
+    let y0 = null, dy = 0;
+    panel.querySelectorAll('[data-sheet-grip]').forEach(g => {
+        g.addEventListener('touchstart', e => { if (e.target.closest('button,a')) return; y0 = e.touches[0].clientY; dy = 0; panel.style.transition = 'none'; }, { passive: true });
+        g.addEventListener('touchmove', e => {
+            if (y0 === null) return;
+            dy = Math.max(0, e.touches[0].clientY - y0);
+            panel.style.transform = `translateY(${dy}px)`;
+        }, { passive: true });
+        g.addEventListener('touchend', () => {
+            if (y0 === null) return;
+            y0 = null;
+            panel.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+            if (dy > 80) closeFn(); else panel.style.transform = 'translateY(0)';
+        });
+    });
+}
+function rpSheetCleanup(drawer) {
+    if (drawer && drawer._fit) (window.visualViewport || window).removeEventListener('resize', drawer._fit);
+}
+// Si la hoja tiene su entrada de historial, cerrar = volver atrás (el popstate la cierra).
+function rpSheetPopHistory() {
+    try { if (history.state && history.state.rpSheet) { history.back(); return true; } } catch (e) {}
+    return false;
+}
+window.addEventListener('popstate', () => {
+    if (document.querySelector('#_productDrawer:not([data-closing])')) return closeProductDrawer(true);
+    if (document.querySelector('#_promoDrawer:not([data-closing])')) return closePromoDrawer(true);
+    // "Atrás" con la ficha abierta y la URL ya fuera de la ficha → cerrar la ficha.
+    const pm = document.getElementById('profileModal');
+    if (pm && !pm.classList.contains('hidden') && !/^\/(negocio|negocios|empresa)\//.test(location.pathname)
+        && typeof closeModal === 'function') closeModal();
+});
+
 // ── Product Drawer — S4.2 Tiendita Virtual ───────────────────────────────
 function openProductDrawer(idxStr) {
     const idx = typeof idxStr === 'string' ? parseInt(idxStr) : idxStr;
@@ -771,7 +836,7 @@ function openProductDrawer(idxStr) {
     if (!biz || !biz.gallery || !biz.gallery[idx]) return;
     const img = biz.gallery[idx];
 
-    document.getElementById('_productDrawer')?.remove();
+    { const old = document.getElementById('_productDrawer'); if (old) { rpSheetCleanup(old); old.remove(); } }
 
     const drawer = document.createElement('div');
     drawer.id = '_productDrawer';
@@ -796,7 +861,7 @@ function openProductDrawer(idxStr) {
     drawer.dataset.mobile = isMobile ? '1' : '0';
 
     const panelStyle = isMobile
-        ? `position:fixed;left:0;right:0;bottom:0;max-height:92vh;width:100%;background:white;z-index:9991;
+        ? `position:fixed;left:0;right:0;bottom:0;max-height:92vh;max-height:92dvh;width:100%;background:white;z-index:9991;
            display:flex;flex-direction:column;transform:translateY(100%);border-radius:20px 20px 0 0;
            transition:transform .35s cubic-bezier(.4,0,.2,1);box-shadow:0 -8px 40px rgba(0,0,0,0.2)`
         : `position:fixed;top:0;right:0;bottom:0;width:min(420px,100vw);background:white;z-index:9991;
@@ -808,10 +873,10 @@ function openProductDrawer(idxStr) {
          style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9990;opacity:0;transition:opacity .3s"></div>
     <div id="_drawerPanel" style="${panelStyle}">
 
-        ${isMobile ? `<div style="display:flex;justify-content:center;padding:10px 0 2px;flex-shrink:0"><div style="width:40px;height:4px;border-radius:4px;background:#cbd5e1"></div></div>` : ''}
+        ${isMobile ? `<div data-sheet-grip style="display:flex;justify-content:center;padding:10px 0 2px;flex-shrink:0;touch-action:none"><div style="width:40px;height:4px;border-radius:4px;background:#cbd5e1"></div></div>` : ''}
 
         <!-- Header -->
-        <div style="padding:${isMobile?'8px 18px 14px':'16px 20px'};border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <div data-sheet-grip style="padding:${isMobile?'8px 18px 14px':'16px 20px'};border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
             <p style="font-size:13px;font-weight:600;color:#64748b;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${biz.tradeName || biz.name}</p>
             <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
                 ${img.id ? `<button onclick="shareProduct(event, ${img.id})"
@@ -825,13 +890,13 @@ function openProductDrawer(idxStr) {
         </div>
 
         <!-- Imagen COMPLETA (contain) -->
-        <div style="flex-shrink:0;background:#0f172a;display:flex;align-items:center;justify-content:center;max-height:46vh">
+        <div data-sheet-img style="flex:0 1 auto;min-height:0;overflow:hidden;background:#0f172a;display:flex;align-items:center;justify-content:center;max-height:46vh">
             <img src="${img.image_url}" alt="${(img.caption||'').replace(/"/g,'')}"
                  style="width:100%;max-height:46vh;object-fit:contain;display:block" onerror="imgFallback(this)">
         </div>
 
         <!-- Contenido scrollable -->
-        <div style="flex:1;overflow-y:auto;padding:18px 20px 16px;-webkit-overflow-scrolling:touch">
+        <div style="flex:1 1 auto;min-height:0;overflow-y:auto;padding:18px 20px 16px;-webkit-overflow-scrolling:touch">
             ${img.caption ? `<h2 style="font-size:18px;font-weight:800;color:#0f172a;margin:0 0 4px;line-height:1.3">${img.caption}</h2>` : ''}
             ${priceHtml}
             ${img.description ? `<p style="font-size:14px;color:#475569;line-height:1.7;margin:14px 0 0">${img.description}</p>` : ''}
@@ -876,11 +941,16 @@ function openProductDrawer(idxStr) {
 
     drawer._escHandler = e => { if (e.key === 'Escape') closeProductDrawer(); };
     document.addEventListener('keydown', drawer._escHandler);
+    rpSheetEnhance(drawer, document.getElementById('_drawerPanel'), isMobile, closeProductDrawer);
 }
 
-function closeProductDrawer() {
+function closeProductDrawer(fromHistory) {
     const drawer = document.getElementById('_productDrawer');
     if (!drawer) return;
+    if (drawer.dataset.closing) return;
+    if (!fromHistory && rpSheetPopHistory()) return; // el "atrás" lo cierra (popstate)
+    drawer.dataset.closing = '1';
+    rpSheetCleanup(drawer);
     const isMobile = drawer.dataset.mobile === '1';
     document.getElementById('_drawerOverlay').style.opacity = '0';
     document.getElementById('_drawerPanel').style.transform = isMobile ? 'translateY(100%)' : 'translateX(100%)';
@@ -918,7 +988,7 @@ async function shareProduct(event, prodId) {
 
 // ── Promo Drawer — desde Home o ficha de empresa ──────────────────────────────
 function openPromoDrawer(p, origin) {
-    document.getElementById('_promoDrawer')?.remove();
+    { const old = document.getElementById('_promoDrawer'); if (old) { rpSheetCleanup(old); old.remove(); } }
     window._currentPromo = p; // para que sharePromo acceda al título sin pasarlo por el onclick
 
     // Trazabilidad: contar la visita a la promo (única por sesión)
@@ -961,7 +1031,7 @@ function openPromoDrawer(p, origin) {
 
     // Mobile → bottom sheet (entra desde abajo). Desktop → panel lateral derecho.
     const panelStyle = isMobile
-        ? `position:fixed;left:0;right:0;bottom:0;max-height:92vh;width:100%;background:white;z-index:9991;
+        ? `position:fixed;left:0;right:0;bottom:0;max-height:92vh;max-height:92dvh;width:100%;background:white;z-index:9991;
            display:flex;flex-direction:column;transform:translateY(100%);border-radius:20px 20px 0 0;
            transition:transform .35s cubic-bezier(.4,0,.2,1);box-shadow:0 -8px 40px rgba(0,0,0,0.2)`
         : `position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);background:white;z-index:9991;
@@ -976,10 +1046,10 @@ function openPromoDrawer(p, origin) {
          style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9990;opacity:0;transition:opacity .3s"></div>
     <div id="_promoDrawerPanel" style="${panelStyle}">
 
-        ${isMobile ? `<div style="display:flex;justify-content:center;padding:10px 0 2px;flex-shrink:0"><div style="width:40px;height:4px;border-radius:4px;background:#cbd5e1"></div></div>` : ''}
+        ${isMobile ? `<div data-sheet-grip style="display:flex;justify-content:center;padding:10px 0 2px;flex-shrink:0;touch-action:none"><div style="width:40px;height:4px;border-radius:4px;background:#cbd5e1"></div></div>` : ''}
 
         <!-- Header -->
-        <div style="padding:${isMobile?'8px 18px 14px':'16px 20px'};border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <div data-sheet-grip style="padding:${isMobile?'8px 18px 14px':'16px 20px'};border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
             <div style="display:flex;align-items:center;gap:10px;min-width:0">
                 ${p.business_logo
                     ? `<img src="${p.business_logo}" style="width:32px;height:32px;border-radius:8px;object-fit:cover;flex-shrink:0" onerror="this.style.display='none'">`
@@ -1002,7 +1072,7 @@ function openPromoDrawer(p, origin) {
         </div>
 
         <!-- Imagen COMPLETA (contain, sin recortar) -->
-        <div style="flex-shrink:0;position:relative;background:#0f172a;display:flex;align-items:center;justify-content:center;max-height:46vh">
+        <div data-sheet-img style="flex:0 1 auto;min-height:0;overflow:hidden;position:relative;background:#0f172a;display:flex;align-items:center;justify-content:center;max-height:46vh">
             ${p.image_url
                 ? `<img src="${p.image_url}" alt="${(p.title||'').replace(/"/g,'')}" style="width:100%;max-height:46vh;object-fit:contain;display:block" onerror="imgFallback(this)">`
                 : `<div style="width:100%;height:200px;display:flex;align-items:center;justify-content:center;font-size:56px;background:linear-gradient(135deg,#fff7ed,#ffedd5)">🔥</div>`
@@ -1015,7 +1085,7 @@ function openPromoDrawer(p, origin) {
         </div>
 
         <!-- Contenido scrollable -->
-        <div style="flex:1;overflow-y:auto;padding:18px 20px 24px;-webkit-overflow-scrolling:touch">
+        <div style="flex:1 1 auto;min-height:0;overflow-y:auto;padding:18px 20px 24px;-webkit-overflow-scrolling:touch">
             <h2 style="font-size:19px;font-weight:900;color:#0f172a;margin:0 0 4px;line-height:1.3">${p.title||''}</h2>
             ${daysLeft !== null ? `<p style="font-size:12px;color:#94a3b8;margin:0 0 8px;display:flex;align-items:center;gap:4px"><i class="fas fa-clock" style="font-size:10px"></i> ${daysLeft} días restantes</p>` : ''}
             ${priceHtml}
@@ -1056,11 +1126,16 @@ function openPromoDrawer(p, origin) {
 
     drawer._escHandler = e => { if (e.key === 'Escape') closePromoDrawer(); };
     document.addEventListener('keydown', drawer._escHandler);
+    rpSheetEnhance(drawer, document.getElementById('_promoDrawerPanel'), isMobile, closePromoDrawer);
 }
 
-function closePromoDrawer() {
+function closePromoDrawer(fromHistory) {
     const drawer = document.getElementById('_promoDrawer');
     if (!drawer) return;
+    if (drawer.dataset.closing) return;
+    if (!fromHistory && rpSheetPopHistory()) return;
+    drawer.dataset.closing = '1';
+    rpSheetCleanup(drawer);
     const isMobile = drawer.dataset.mobile === '1';
     document.getElementById('_promoDrawerOverlay').style.opacity = '0';
     document.getElementById('_promoDrawerPanel').style.transform = isMobile ? 'translateY(100%)' : 'translateX(100%)';

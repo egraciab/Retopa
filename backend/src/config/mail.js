@@ -343,7 +343,7 @@ const templates = {
             <p style="color:#475569;font-size:14px;line-height:1.7;margin:0 0 20px">
               ${t('message', `Como cliente fundador, le regalamos a <strong>${data.businessName}</strong> el plan
               <strong style="color:#b45309">Destacado</strong> en ${data.siteName || 'RetoPA'}, <strong>gratis por ${data.days} días</strong>.
-              Desde ya aparecés primero en tu categoría y con el sello Destacado.`)}
+              Desde ya aparecés primero en tu rubro y con el sello Destacado.`)}
             </p>
             <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:16px 20px;margin-bottom:22px;text-align:center">
               <p style="margin:0;font-size:13px;color:#92400e">Tu Destacado está activo hasta el</p>
@@ -553,7 +553,7 @@ const templates = {
           <div style="padding:32px 40px">
             <p style="color:#0f172a;font-size:16px;font-weight:700;margin:0 0 8px">Hola ${data.name || ''} 👋</p>
             <p style="color:#475569;font-size:14px;line-height:1.7;margin:0 0 20px">
-              ${t('message', `El plan <strong>${data.planLabel}</strong> de <strong>${data.businessName}</strong> venció y tu ficha volvió al plan gratuito. Tranquilo: <strong>no borramos nada</strong> — tus categorías, tu galería y tus datos quedan guardados y vuelven al instante apenas reactives el plan.`)}
+              ${t('message', `El plan <strong>${data.planLabel}</strong> de <strong>${data.businessName}</strong> venció y tu ficha volvió al plan gratuito. Tranquilo: <strong>no borramos nada</strong> — tus rubros, tu galería y tus datos quedan guardados y vuelven al instante apenas reactives el plan.`)}
             </p>
             <div style="display:flex;gap:12px;margin-bottom:24px">
               <div style="flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center">
@@ -726,7 +726,7 @@ const templates = {
                 <li>Completar descripción, fotos y horarios</li>
                 <li>Ver estadísticas de visitas y contactos</li>
                 <li>Responder reseñas de clientes</li>
-                <li>Gestionar tus categorías y servicios</li>
+                <li>Gestionar tus rubros y servicios</li>
               </ul>
             </div>
             <div style="text-align:center;margin:32px 0">
@@ -747,11 +747,13 @@ const templates = {
     }),
 
     claimAdminAlert: (data) => ({
-        subject: `🔔 Nuevo claim — ${data.businessName} (${data.userName})`,
+        subject: data.auto
+            ? `⚡ Reclamo automático (revisar) — ${data.businessName} (${data.userName})`
+            : `🔔 Nuevo claim — ${data.businessName} (${data.userName})`,
         html: `
         <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:32px auto;background:white;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
           <div style="background:linear-gradient(135deg,#E8B84B,#c89a35);padding:28px 40px;text-align:center">
-            <h1 style="color:white;margin:0;font-size:20px;font-weight:800">🔔 Nuevo Claim Pendiente</h1>
+            <h1 style="color:white;margin:0;font-size:20px;font-weight:800">${data.auto ? '⚡ Reclamo automático · revisar' : '🔔 Nuevo Claim Pendiente'}</h1>
             <p style="color:rgba(255,255,255,0.85);margin:4px 0 0;font-size:13px">RetoPA · Panel Admin</p>
           </div>
           <div style="padding:28px 40px">
@@ -771,6 +773,169 @@ const templates = {
           </div>
         </div>`
     }),
+
+    // ── Login sin contraseña: link de acceso de un uso (2026-10-13) ──────────
+    accessLink: (data) => {
+        const esc = s => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const first = String(data.name || '').trim().split(/\s+/)[0] || '';
+        return {
+            subject: `Tu acceso a ${data.siteName || 'RetoPA'}`,
+            html: `
+        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:32px auto;background:white;border-radius:20px;padding:28px 32px;box-shadow:0 4px 24px rgba(0,0,0,0.08);font-size:15px;color:#0f172a;line-height:1.55">
+          <p style="margin:0 0 12px">Hola${first ? ' ' + esc(first) : ''},</p>
+          <p style="margin:0 0 20px">Pediste entrar a tu panel de ${esc(data.siteName || 'RetoPA')} sin contraseña. Tocá el botón:</p>
+          <div style="text-align:center;margin:0 0 20px">
+            <a href="${esc(data.url)}" style="display:inline-block;background:#1B3A6B;color:white;text-decoration:none;padding:14px 30px;border-radius:12px;font-weight:800;font-size:15px">Entrar a mi panel</a>
+          </div>
+          <p style="margin:0;font-size:13px;color:#64748b">Vale 7 días y un solo uso. Si no lo pediste vos, ignorá este correo. Adentro podés crear una contraseña para entrar más rápido.</p>
+        </div>`
+        };
+    },
+
+    // ── E1: al dueño que reclamó con el enlace y dejó su correo ──────────────
+    claimWelcome: (data) => {
+        const esc = s => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const first = String(data.name || '').trim().split(/\s+/)[0] || '';
+        return {
+            subject: `¡${data.businessName || 'Tu negocio'} ya es tuyo en ${data.siteName || 'RetoPA'}!`,
+            html: `
+        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:32px auto;background:white;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+          <div style="background:linear-gradient(135deg,#1B3A6B,#0f2548);padding:26px 32px;text-align:center">
+            <div style="font-size:34px">🎉</div>
+            <h1 style="color:white;margin:6px 0 0;font-size:20px;font-weight:800">¡Ya es tuyo${first ? ', ' + esc(first) : ''}!</h1>
+          </div>
+          <div style="padding:28px 32px;font-size:15px;color:#0f172a;line-height:1.55">
+            <p style="margin:0 0 12px"><strong>${esc(data.businessName)}</strong> ya está a tu nombre en ${esc(data.siteName || 'RetoPA')}. Desde tu panel cargás fotos, horarios y todo lo que hace que te elijan.</p>
+            <p style="margin:0 0 22px">Confirmá tu correo con este botón: además te lleva directo a tu panel.</p>
+            <div style="text-align:center;margin:0 0 22px">
+              <a href="${esc(data.verifyUrl)}" style="display:inline-block;background:#1B3A6B;color:white;text-decoration:none;padding:14px 30px;border-radius:12px;font-weight:800;font-size:15px">Confirmar mi correo y entrar</a>
+            </div>
+            <p style="margin:0 0 6px;font-size:13px;color:#64748b">El botón vale 7 días. Si después querés entrar con contraseña, usá «Olvidé mi contraseña» con este correo.</p>
+            <p style="margin:0;font-size:13px;color:#64748b">Tu ficha: <a href="${esc(data.fichaUrl)}" style="color:#0ea5e9">${esc(data.fichaUrl)}</a></p>
+          </div>
+        </div>`
+        };
+    },
+
+    // ── E1: el admin confirmó el reclamo automático → ficha verificada ───────
+    claimConfirmed: (data) => {
+        const esc = s => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        return {
+            subject: `✓ ${data.businessName || 'Tu negocio'} ya está verificado en ${data.siteName || 'RetoPA'}`,
+            html: `
+        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:32px auto;background:white;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+          <div style="background:#16a34a;padding:24px 32px;text-align:center">
+            <h1 style="color:white;margin:0;font-size:20px;font-weight:800">✓ Ficha verificada</h1>
+          </div>
+          <div style="padding:28px 32px;font-size:15px;color:#0f172a;line-height:1.55">
+            <p style="margin:0 0 12px">Hola${data.name ? ' ' + esc(String(data.name).split(' ')[0]) : ''},</p>
+            <p style="margin:0 0 20px">Revisamos tu reclamo: <strong>${esc(data.businessName)}</strong> ya muestra el sello de <strong>verificado</strong> en ${esc(data.siteName || 'RetoPA')}.</p>
+            <div style="text-align:center;margin:0 0 18px">
+              <a href="${esc(data.accessUrl || data.panelUrl)}" style="display:inline-block;background:#1B3A6B;color:white;text-decoration:none;padding:13px 28px;border-radius:12px;font-weight:800;font-size:14px">Entrar a mi panel</a>
+            </div>
+            <p style="margin:0;font-size:13px;color:#64748b">Mirá tu ficha: <a href="${esc(data.fichaUrl)}" style="color:#0ea5e9">${esc(data.fichaUrl)}</a>${data.accessUrl ? '<br>El botón vale 7 días y un solo uso.' : ''}</p>
+          </div>
+        </div>`
+        };
+    },
+
+    // ── E1: resolvimos un cambio sensible que pidió el dueño ─────────────────
+    ownerChangeDecision: (data) => {
+        const esc = s => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const ok = !!data.approved;
+        return {
+            subject: ok ? `Actualizamos ${data.fieldLabel} de ${data.businessName}` : `No pudimos aplicar el cambio en ${data.businessName}`,
+            html: `
+        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:32px auto;background:white;border-radius:20px;padding:28px 32px;box-shadow:0 4px 24px rgba(0,0,0,0.08);font-size:15px;color:#0f172a;line-height:1.55">
+          <p style="margin:0 0 12px">Hola${data.name ? ' ' + esc(String(data.name).split(' ')[0]) : ''},</p>
+          ${ok
+            ? `<p style="margin:0 0 12px">Listo: el <strong>${esc(data.fieldLabel)}</strong> de <strong>${esc(data.businessName)}</strong> ahora es <strong>${esc(data.newValue)}</strong>.</p>`
+            : `<p style="margin:0 0 12px">Revisamos el cambio de <strong>${esc(data.fieldLabel)}</strong> que pediste para <strong>${esc(data.businessName)}</strong> y no lo pudimos aplicar. Respondé este correo y lo vemos juntos.</p>`}
+          <p style="margin:0;font-size:13px;color:#64748b">Tu ficha: <a href="${esc(data.fichaUrl)}" style="color:#0ea5e9">${esc(data.fichaUrl)}</a></p>
+        </div>`
+        };
+    },
+
+    // ── Fusión de fichas (2026-10-14): el dueño se volvió a dar de alta y unimos todo ──
+    fichasFusionadas: (data) => {
+        const esc = s => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const first = String(data.name || '').trim().split(/\s+/)[0] || '';
+        return {
+            subject: `Unimos ${data.businessName || 'tu negocio'} a tu ficha de siempre`,
+            html: `
+        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:32px auto;background:white;border-radius:20px;padding:28px 32px;box-shadow:0 4px 24px rgba(0,0,0,0.08);font-size:15px;color:#0f172a;line-height:1.55">
+          <p style="margin:0 0 12px">Hola${first ? ' ' + esc(first) : ''},</p>
+          <p style="margin:0 0 12px">Vimos que cargaste de nuevo <strong>${esc(data.businessName)}</strong> en ${esc(data.siteName || 'RetoPA')}. Ya lo unimos a tu ficha de siempre, con sus visitas y lo que agregaste: <strong>no tenés que cargar nada más</strong>.</p>
+          ${data.accessUrl ? `<div style="text-align:center;margin:20px 0">
+            <a href="${esc(data.accessUrl)}" style="display:inline-block;background:#1B3A6B;color:white;text-decoration:none;padding:14px 30px;border-radius:12px;font-weight:800;font-size:15px">Entrar a mi panel</a>
+          </div>` : ''}
+          <p style="margin:0;font-size:13px;color:#64748b">Tu ficha: <a href="${esc(data.fichaUrl)}" style="color:#0ea5e9">${esc(data.fichaUrl)}</a>${data.accessUrl ? '<br>El botón vale 7 días y un solo uso. Adentro podés crear una contraseña para entrar más rápido.' : ''}</p>
+        </div>`
+        };
+    },
+
+    // ── E1: aviso al correo de la FICHA cuando alguien la reclama con el enlace ──
+    // Es el "otro canal": si no fue el dueño, que nos avise. Datos escapados.
+    claimNoticeFicha: (data) => {
+        const esc = s => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        return {
+            subject: `Tu negocio ${data.businessName || ''} fue reclamado en ${data.siteName || 'RetoPA'}`,
+            html: `
+        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:32px auto;background:white;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+          <div style="background:#1B3A6B;padding:24px 32px">
+            <h1 style="color:white;margin:0;font-size:19px;font-weight:800">${esc(data.siteName || 'RetoPA')}</h1>
+          </div>
+          <div style="padding:28px 32px;font-size:15px;color:#0f172a;line-height:1.55">
+            <p style="margin:0 0 12px">Hola,</p>
+            <p style="margin:0 0 12px"><strong>${esc(data.claimantName)}</strong> acaba de reclamar la ficha de <strong>${esc(data.businessName)}</strong> en ${esc(data.siteName || 'RetoPA')} y ya puede gestionarla.</p>
+            <p style="margin:0 0 12px">Si fuiste vos o alguien de tu equipo, no tenés que hacer nada.</p>
+            <p style="margin:0 0 20px"><strong>Si no reconocés este reclamo, respondé este correo</strong> y lo revisamos enseguida.</p>
+            <a href="${esc(data.fichaUrl || data.siteUrl || 'https://retopa.com.py')}" style="display:inline-block;background:#0ea5e9;color:white;text-decoration:none;padding:12px 26px;border-radius:10px;font-weight:700;font-size:14px">Ver la ficha</a>
+          </div>
+        </div>`
+        };
+    },
+
+    // ── Interno: resumen diario de prospectos (jobs/prospectDigest.js) ────────
+    // Solo va a site_config.prospect_digest_to (al equipo), nunca a prospectos.
+    // Los nombres de negocio vienen de la base → se escapan.
+    prospectDigest: (data) => {
+        const esc = s => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const items = Array.isArray(data.items) ? data.items : [];
+        const lista = items.length
+            ? items.map(i => `<li style="padding:6px 0;border-top:1px solid #f1f5f9;color:#0f172a">${esc(i)}</li>`).join('')
+            : '<li style="padding:6px 0;color:#94a3b8">(sin destacados hoy)</li>';
+        const n = Number(data.count) || 0;
+        return {
+            subject: `📋 ${n} ${n === 1 ? 'prospecto' : 'prospectos'} para contactar hoy — ${data.siteName || 'RetoPA'}`,
+            html: `
+        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:32px auto;background:white;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+          <div style="background:linear-gradient(135deg,#1B3A6B,#0ea5e9);padding:28px 40px;text-align:center">
+            <h1 style="color:white;margin:0;font-size:20px;font-weight:800">📋 Prospectos de hoy</h1>
+            <p style="color:rgba(255,255,255,0.85);margin:4px 0 0;font-size:13px">${esc(data.siteName || 'RetoPA')} · Panel Prospectos</p>
+          </div>
+          <div style="padding:28px 40px">
+            <p style="margin:0 0 6px;font-size:15px;color:#0f172a"><strong>${n}</strong> fichas sin dueño con tráfico en la cola · <strong>${Number(data.visitasMes) || 0}</strong> visitas este mes.</p>
+            <p style="margin:0 0 18px;font-size:13px;color:#64748b">Contactados en 7 días: ${Number(data.enviados7d) || 0} · Reclamaron (histórico): ${Number(data.reclamaron) || 0} · Tasa: ${esc(data.tasaClaim ?? 0)}%</p>
+            <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em">Los más visitados</p>
+            <ul style="list-style:none;margin:0 0 8px;padding:0;font-size:14px">${lista}</ul>
+            <div style="text-align:center;margin:24px 0 4px">
+              <a href="${esc(data.panelUrl || ((data.siteUrl || 'https://retopa.com.py') + '/admin'))}"
+                 style="display:inline-block;background:#1B3A6B;color:white;text-decoration:none;padding:13px 32px;border-radius:10px;font-weight:700;font-size:14px">
+                Abrir Panel Prospectos →
+              </a>
+            </div>
+          </div>
+        </div>`
+        };
+    },
 
     passwordReset: (data, t) => ({
         subject: t('subject', `🔐 Restablecer contraseña — ${data.siteName || 'RetoPA'}`),
@@ -811,7 +976,7 @@ const templates = {
             ${[
               ['📸','Subí buenas fotos','Las fichas con galería reciben muchas más visitas. Sumá tu local, tus productos y tu logo.'],
               ['📱','Confirmá tu WhatsApp','Es el botón que más usan tus clientes para contactarte. Revisá que el número esté bien.'],
-              ['📝','Completá tu descripción y categorías','Cuanto más completa tu ficha, más arriba aparecés en las búsquedas.'],
+              ['📝','Completá tu descripción y rubros','Cuanto más completa tu ficha, más arriba aparecés en las búsquedas.'],
               ['⭐','Respondé tus reseñas','Contestar las opiniones genera confianza y te ayuda a fidelizar clientes.'],
               ['🕐','Cargá tus horarios','Que te encuentren abiertos cuando te buscan es clave para no perder contactos.'],
             ].map(([ic,ti,tx]) => `
@@ -886,7 +1051,7 @@ const templates = {
               ${t('intro', `Ya tenés tu cuenta lista. Con estos 3 pasos, <strong>${data.businessName || 'tu empresa'}</strong> queda visible y lista para recibir clientes en ${data.siteName || 'RetoPA'}:`)}
             </p>
             ${[
-              ['1','Completá tu ficha','Datos de contacto, dirección, descripción y categorías. Así te encuentran.'],
+              ['1','Completá tu ficha','Datos de contacto, dirección, descripción y rubros. Así te encuentran.'],
               ['2','Subí tus fotos','Una buena galería multiplica las visitas a tu perfil.'],
               ['3','Compartí tu enlace','Pasá el link de tu ficha por WhatsApp y redes para sumar reseñas y likes.'],
             ].map(([n,ti,tx]) => `
@@ -947,6 +1112,9 @@ const templates = {
 // Lee configuración SMTP desde site_config (Panel Admin) con fallback a variables de entorno
 // opts: { skipLog?:bool, logType?:string } — logging centralizado en email_log.
 async function sendEmail(to, templateName, data, opts = {}) {
+    // E1: el correo del usuario es opcional (identidad por WhatsApp). Sin
+    // destinatario no hay nada que mandar — no es un error ni ensucia email_log.
+    if (!to || !String(to).trim()) return { success: false, skipped: 'no_recipient' };
     let subject = '';
     // Registrar TODOS los envíos (éxito/fallo) en email_log, salvo skipLog.
     const _logEmail = (status, errMsg) => {

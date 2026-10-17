@@ -12,14 +12,16 @@
  * - Envío UNO A UNO desde el WhatsApp del operador (no masivo/automático).
  */
 const PROSPECT_TEMPLATE_KEY = 'retopa_prospect_template';
+// E1 (2026-10-13): {link_reclamo} = enlace con token para reclamar en un toque
+// (se genera al tocar WhatsApp). {link_ficha} sigue existiendo (ficha pública).
 const PROSPECT_DEFAULT_TEMPLATE =
-`¡Hola! 👋 Te escribo de RetoPA. Sumamos gratis tu negocio {nombre} ({rubro} · {ciudad}) a nuestro directorio.
-Mirá tu ficha acá: {link_ficha}
+`¡Hola! 👋 Te escribo de RetoPA. Tu negocio {nombre} ({rubro} · {ciudad}) ya aparece en nuestro directorio.
+¿Es tuyo? Reclamalo gratis en un toque, sin contraseña: {link_reclamo}
 
-¿La querés gestionar y aparecer como *verificado*? Te ayudo en 2 minutos. 🙌`;
-const PROSPECT_ESTADOS = ['pendiente', 'enviado', 'respondio', 'reclamo', 'rechazo'];
-const PROSPECT_ESTADO_LABEL = { pendiente: 'Pendiente', enviado: 'Enviado', respondio: 'Respondió', reclamo: 'Reclamó', rechazo: 'Rechazó' };
-const PROSPECT_ESTADO_COLOR = { pendiente: '#64748b', enviado: '#0ea5e9', respondio: '#16a34a', reclamo: '#8b5cf6', rechazo: '#ef4444' };
+Así lo gestionás vos: fotos, horarios y tu WhatsApp. 🙌`;
+const PROSPECT_ESTADOS = ['pendiente', 'enviado', 'respondio', 'reclamo', 'rechazo', 'no_es'];
+const PROSPECT_ESTADO_LABEL = { pendiente: 'Pendiente', enviado: 'Enviado', respondio: 'Respondió', reclamo: 'Reclamó', rechazo: 'Rechazó', no_es: 'No es suyo' };
+const PROSPECT_ESTADO_COLOR = { pendiente: '#64748b', enviado: '#0ea5e9', respondio: '#16a34a', reclamo: '#8b5cf6', rechazo: '#ef4444', no_es: '#a16207' };
 const PROSPECT_DAILY_WARN = 30; // aviso anti-ban de WhatsApp
 
 let _prospAll = [];       // todos los grupos del origen actual
@@ -52,7 +54,8 @@ function _prospSanitize(s) {
 }
 
 // Construye el mensaje para un grupo usando su ficha PRINCIPAL (la primera).
-function prospectBuildMessage(group) {
+// claimUrl: enlace de reclamo con token (si la plantilla usa {link_reclamo}).
+function prospectBuildMessage(group, claimUrl) {
     const f = (group.fichas && group.fichas[0]) || {};
     const tplEl = document.getElementById('prospTemplate');
     const tpl = tplEl ? tplEl.value : prospectGetTemplate();
@@ -60,8 +63,25 @@ function prospectBuildMessage(group) {
         .replace(/\{nombre\}/g, f.trade_name || f.name || '')
         .replace(/\{rubro\}/g, f.rubro || '')
         .replace(/\{ciudad\}/g, f.ciudad || '')
+        .replace(/\{link_reclamo\}/g, claimUrl || f.ficha_url || '')
         .replace(/\{link_ficha\}/g, f.ficha_url || '');
     return _prospSanitize(msg);
+}
+function prospectTemplateUsesClaim() {
+    const tplEl = document.getElementById('prospTemplate');
+    return /\{link_reclamo\}/.test(tplEl ? tplEl.value : prospectGetTemplate());
+}
+// Aviso: la plantilla guardada todavía manda la ficha pública en vez del reclamo.
+function prospectRenderTemplateHint() {
+    const el = document.getElementById('prospTplHint');
+    if (!el) return;
+    el.classList.toggle('hidden', prospectTemplateUsesClaim());
+}
+function prospectUseClaimLink() {
+    const t = document.getElementById('prospTemplate');
+    if (!t) return;
+    t.value = /\{link_ficha\}/.test(t.value) ? t.value.replace(/\{link_ficha\}/g, '{link_reclamo}') : (t.value.trimEnd() + '\n{link_reclamo}');
+    prospectSaveTemplate(); prospectRenderTemplateHint();
 }
 
 // Inserta un emoji REAL en la posición del cursor de la plantilla (evita pegar
@@ -95,9 +115,13 @@ async function initProspectsSection() {
 
     <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
         <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Plantilla del mensaje
-            <span class="normal-case font-normal text-gray-400">— placeholders: {nombre} {rubro} {ciudad} {link_ficha}</span>
+            <span class="normal-case font-normal text-gray-400">— placeholders: {nombre} {rubro} {ciudad} {link_reclamo} {link_ficha}</span>
         </label>
-        <textarea id="prospTemplate" rows="4" oninput="prospectSaveTemplate(); prospectRenderTable();"
+        <div id="prospTplHint" class="hidden mb-2 text-sm rounded-xl px-4 py-2.5 flex items-center gap-2 flex-wrap" style="background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe">
+            <span class="flex-1 min-w-[200px]">Tu plantilla manda la ficha pública. Con <b>{link_reclamo}</b> el dueño la reclama en un toque, sin contraseña, y lo medimos en el embudo.</span>
+            <button type="button" onclick="prospectUseClaimLink()" class="text-xs font-bold bg-[#1B3A6B] text-white px-3 py-1.5 rounded-lg">Usar {link_reclamo}</button>
+        </div>
+        <textarea id="prospTemplate" rows="4" oninput="prospectSaveTemplate(); prospectRenderTemplateHint(); prospectRenderTable();"
             class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#0ea5e9]"></textarea>
         <div class="flex items-center gap-1.5 mt-2 flex-wrap">
             <span class="text-xs text-gray-400 mr-1">Insertar emoji:</span>
@@ -157,6 +181,7 @@ async function initProspectsSection() {
 
     const tpl = document.getElementById('prospTemplate');
     if (tpl) tpl.value = prospectGetTemplate();
+    prospectRenderTemplateHint();
 
     await prospectLoadSources();
     await prospectLoad();
@@ -301,10 +326,11 @@ function prospectRenderTable() {
 }
 
 // Abre wa.me con el mensaje y marca el grupo como 'enviado'.
-function prospectWhatsApp(whatsapp) {
+async function prospectWhatsApp(whatsapp) {
     if (!whatsapp) return;
     const group = _prospAll.find(g => g.whatsapp === whatsapp);
     if (!group) return;
+    if (prospectTemplateUsesClaim()) return prospectWhatsAppClaim(whatsapp, group);
     const msg = prospectBuildMessage(group);
     // Respaldo: dejamos el mensaje limpio (con sus emojis) en el portapapeles, así
     // si el prefill de WhatsApp llega a mostrar algo raro, se pega con un Ctrl/Cmd+V
@@ -313,6 +339,30 @@ function prospectWhatsApp(whatsapp) {
     window.open(`https://wa.me/${whatsapp}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
     if (typeof showToast === 'function') showToast('Chat abierto. Mensaje copiado por si necesitás pegarlo (Ctrl/Cmd+V).', 'success');
     // Marcar 'enviado' con fecha (no pisa un estado más avanzado si el operador ya lo movió).
+    prospectSetEstado(whatsapp, 'enviado', true);
+}
+
+// {link_reclamo}: la pestaña se abre YA (dentro del toque, para que el navegador no
+// la bloquee) y se completa cuando llega el enlace con token de la ficha principal.
+async function prospectWhatsAppClaim(whatsapp, group) {
+    const f = (group.fichas && group.fichas[0]) || {};
+    const win = window.open('about:blank', '_blank');
+    let claimUrl = null;
+    try {
+        const r = await apiAdminPost('/prospects/claim-link/' + encodeURIComponent(f.id), {});
+        if (r && r.success) claimUrl = r.url;
+    } catch (e) {}
+    if (!claimUrl) {
+        if (win) win.close();
+        if (typeof showToast === 'function') showToast('No se pudo generar el enlace de reclamo. Probá de nuevo.', 'error');
+        return;
+    }
+    const msg = prospectBuildMessage(group, claimUrl);
+    try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(msg); } catch (e) {}
+    const waUrl = `https://wa.me/${whatsapp}?text=${encodeURIComponent(msg)}`;
+    if (win) { try { win.opener = null; } catch (e) {} win.location.href = waUrl; }
+    else window.open(waUrl, '_blank', 'noopener');
+    if (typeof showToast === 'function') showToast('Chat abierto con el enlace de reclamo. Mensaje copiado por si lo necesitás.', 'success');
     prospectSetEstado(whatsapp, 'enviado', true);
 }
 

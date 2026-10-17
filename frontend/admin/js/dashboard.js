@@ -38,6 +38,15 @@ async function loadDashboard() {
         badge.classList.add('hidden');
     }
 
+    // Claims pendientes → su propio badge (antes solo se actualizaba al abrir Claims).
+    const cBadge = document.getElementById('claimsBadge');
+    const pendingClaims = parseInt(s.pending_claims || 0);
+    if (cBadge && s.pending_claims !== undefined) {
+        cBadge.textContent = pendingClaims;
+        cBadge.classList.toggle('hidden', pendingClaims === 0);
+        if (pendingClaims > 0) document.getElementById('notifBadge').classList.remove('hidden');
+    }
+
     const total = parseInt(s.total_businesses) || 1;
     const basicPct = Math.round((parseInt(s.basic_plan || 0) / total) * 100);
     const featPct  = Math.round((parseInt(s.featured_plan || 0) / total) * 100);

@@ -235,6 +235,16 @@ function showShareToast(msg) {
 
 // ── Claim modal ────────────────────────────────────────────────────────────
 function openClaimModal(slug, name) {
+    // 2026-10-14: la ficha usa la MISMA pantalla que el link de Prospectos
+    // (/reclamar): rubro de lista, WhatsApp, sin contraseña. La prueba de que es
+    // el dueño la da un WhatsApp que nos manda desde el número de la ficha.
+    if (slug) {
+        // 2026-10-17: como modal sobre la ficha (misma pantalla, ?embed=1).
+        if (typeof rpOpenFlowModal === 'function') rpOpenFlowModal('/reclamar/?ficha=' + encodeURIComponent(slug), '¿Es tu negocio?');
+        else window.location.href = '/reclamar/?ficha=' + encodeURIComponent(slug);
+        return;
+    }
+    // (Respaldo: formulario viejo, solo si no hay slug.)
     // Crear modal de claim dinámicamente
     const existing = document.getElementById('claimModal');
     if (existing) existing.remove();

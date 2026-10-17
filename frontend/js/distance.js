@@ -91,7 +91,17 @@ function refreshLocationNow(e) {
  * - Coord ciudad → "~5 km"   en gris (aproximado)
  */
 function renderDistanceBadge(biz) {
-    if (biz.distance_m == null) return '';
+    // Si el servidor no mandó la distancia (p. ej. búsqueda semántica) pero la ficha
+    // tiene coordenadas y conocemos la ubicación, la calculamos acá (haversine).
+    if (biz.distance_m == null) {
+        const loc = (typeof getUserLocation === 'function') ? getUserLocation() : null;
+        const la = parseFloat(biz.lat), ln = parseFloat(biz.lng);
+        if (!loc || !isFinite(la) || !isFinite(ln)) return '';
+        const R = 6371000, rad = x => x * Math.PI / 180;
+        const dLa = rad(la - loc.lat), dLn = rad(ln - loc.lng);
+        const h = Math.sin(dLa / 2) ** 2 + Math.cos(rad(loc.lat)) * Math.cos(rad(la)) * Math.sin(dLn / 2) ** 2;
+        biz = Object.assign({}, biz, { distance_m: 2 * R * Math.asin(Math.sqrt(h)) });
+    }
     const km = biz.distance_m / 1000;
     const isReal = biz.coordIsReal === true;
     const label = km < 1

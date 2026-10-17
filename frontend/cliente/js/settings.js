@@ -28,7 +28,20 @@ async function loadSettings() {
 
     // MFA status
     renderMfaStatus(!!u.mfa_enabled);
+
+    // 2026-10-13: quien reclamó por enlace no tiene contraseña → "Creá tu contraseña"
+    // (sin pedir la actual).
+    _settingsNoPassword = u.has_password === false;
+    const cur = document.getElementById('currentPass');
+    const curBox = cur ? cur.closest('div') : null;
+    if (curBox) curBox.classList.toggle('hidden', _settingsNoPassword);
+    const box = cur ? cur.closest('.bg-white') : null;
+    const h = box ? box.querySelector('h3') : null;
+    const btn = box ? box.querySelector('button[onclick="changePassword()"]') : null;
+    if (h) h.innerHTML = `<i class="fas fa-lock text-brand-500"></i> ${_settingsNoPassword ? 'Creá tu contraseña' : 'Cambiar contraseña'}`;
+    if (btn) btn.innerHTML = `<i class="fas fa-key"></i> ${_settingsNoPassword ? 'Crear contraseña' : 'Cambiar contraseña'}`;
 }
+let _settingsNoPassword = false;
 
 async function saveSettings() {
     const name  = document.getElementById('settingName').value.trim();
@@ -56,13 +69,14 @@ async function changePassword() {
     const current = document.getElementById('currentPass').value;
     const newP    = document.getElementById('newPass').value;
     const confirm = document.getElementById('confirmPass').value;
-    if (!current || !newP || !confirm) { errEl.textContent = 'Completá todos los campos'; errEl.classList.remove('hidden'); return; }
+    if ((!current && !_settingsNoPassword) || !newP || !confirm) { errEl.textContent = 'Completá todos los campos'; errEl.classList.remove('hidden'); return; }
     if (newP !== confirm) { errEl.textContent = 'Las contraseñas no coinciden'; errEl.classList.remove('hidden'); return; }
     if (newP.length < 8) { errEl.textContent = 'Mínimo 8 caracteres'; errEl.classList.remove('hidden'); return; }
-    const res = await clientPut('/client/me', { currentPassword: current, password: newP });
+    const res = await clientPut('/client/me', _settingsNoPassword ? { password: newP } : { currentPassword: current, password: newP });
     if (res.success) {
         ['currentPass','newPass','confirmPass'].forEach(id => document.getElementById(id).value = '');
-        showToastClient('Contraseña actualizada ✅');
+        showToastClient(_settingsNoPassword ? 'Contraseña creada ✅ Ya podés entrar con tu WhatsApp o correo.' : 'Contraseña actualizada ✅');
+        if (_settingsNoPassword) { _settingsNoPassword = false; loadSettings(); }
     } else {
         errEl.textContent = res.error || 'Error al cambiar contraseña';
         errEl.classList.remove('hidden');

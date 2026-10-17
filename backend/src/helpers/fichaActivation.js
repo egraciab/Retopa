@@ -12,6 +12,10 @@
  *    el acto (el correo ya está probado) y NO mandamos activación.
  *  - Si existe pero SIN verificar → reusamos la cuenta y (re)enviamos activación.
  *  - Si no existe → creamos cuenta pendiente (sin contraseña usable) + activación.
+ *  - 2026-10-17: la ficha queda YA a nombre de esa cuenta (también pendiente). Antes
+ *    se enganchaba recién al activar, y como casi nadie activa, la ficha quedaba
+ *    huérfana aunque el admin la verificara. Si la cuenta no tiene WhatsApp, se
+ *    guarda el celular del alta (para entrar con WhatsApp).
  *
  * password_hash placeholder: un valor que NO es un hash bcrypt válido, así ningún
  * login puede matchear hasta que el dueño defina su contraseña en la activación.
@@ -20,7 +24,7 @@ const crypto = require('crypto');
 
 const PENDING_PWD = '!pending-no-password!';
 
-async function provisionFichaOwnerActivation({ pool, sendEmail, email, name, businessId, businessName, siteName, siteUrl, businessUrl }) {
+async function provisionFichaOwnerActivation({ pool, sendEmail, email, name, businessId, businessName, siteName, siteUrl, businessUrl, phone }) {
   const em = String(email || '').trim().toLowerCase();
   if (!em) return { mode: 'skip', sentActivation: false };
 
@@ -60,7 +64,24 @@ async function provisionFichaOwnerActivation({ pool, sendEmail, email, name, bus
     return { mode: 'linked_verified', userId, sentActivation: false };
   }
 
-  // Pendiente/sin verificar → token de activación (7 días) + correo.
+  // Pendiente/sin verificar → la ficha ya es suya (la creó él) …
+  if (businessId) {
+    await pool.query(
+      `INSERT INTO user_businesses (user_id, business_id, is_owner, can_edit)
+       VALUES ($1, $2, TRUE, TRUE)
+       ON CONFLICT (user_id, business_id) DO UPDATE SET is_owner=TRUE, can_edit=TRUE`,
+      [userId, businessId]
+    ).catch(() => {});
+  }
+  const m = String(phone || '').replace(/\D/g, '').match(/^(?:595|0)?(9\d{8})$/);
+  if (m) {
+    await pool.query(
+      `UPDATE users SET phone = $2 WHERE id = $1 AND COALESCE(phone, '') = ''
+         AND NOT EXISTS (SELECT 1 FROM users o WHERE o.id <> $1 AND right(regexp_replace(COALESCE(o.phone,''),'\\D','','g'), 9) = $3)`,
+      [userId, '+595' + m[1], m[1]]).catch(() => {});
+  }
+
+  // … y token de activación (7 días) + correo para confirmar el correo.
   const token  = crypto.randomBytes(32).toString('hex');
   const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   await pool.query('UPDATE users SET verify_token=$1, verify_token_expires=$2 WHERE id=$3', [token, expiry, userId]);

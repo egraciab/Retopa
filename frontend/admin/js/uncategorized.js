@@ -22,7 +22,7 @@ async function initUncategorizedSection() {
     container.innerHTML = `
     <div class="flex items-center justify-between mb-6">
         <div>
-            <h2 class="text-2xl font-bold text-gray-900">Sin categoría</h2>
+            <h2 class="text-2xl font-bold text-gray-900">Sin rubro</h2>
             <p class="text-sm text-gray-500 mt-1" id="uncatSubtitle">Cargando...</p>
         </div>
         <button onclick="loadUncategorized(true)" class="btn-brand text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2">
@@ -51,7 +51,7 @@ async function initUncategorizedSection() {
         <span id="uncatSelCount" class="text-sm font-bold text-blue-700">0 seleccionadas</span>
         <div class="flex-1 min-w-48">
             <select id="uncatBulkCat" class="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm bg-white">
-                <option value="">— Elegir categoría —</option>
+                <option value="">— Elegir rubro —</option>
                 ${buildUncatCatOptions()}
             </select>
         </div>
@@ -131,7 +131,7 @@ async function loadUncategorized(resetPage = false) {
 
     _uncatTotal = data.total || 0;
     const subtitle = document.getElementById('uncatSubtitle');
-    if (subtitle) subtitle.textContent = `${_uncatTotal.toLocaleString()} empresa${_uncatTotal !== 1 ? 's' : ''} sin categoría`;
+    if (subtitle) subtitle.textContent = `${_uncatTotal.toLocaleString()} empresa${_uncatTotal !== 1 ? 's' : ''} sin rubro`;
 
     const badge = document.getElementById('uncategorizedBadge');
     if (badge) { badge.textContent = _uncatTotal > 999 ? '999+' : _uncatTotal; badge.classList.toggle('hidden', _uncatTotal === 0); }
@@ -139,7 +139,7 @@ async function loadUncategorized(resetPage = false) {
     if (!data.data.length) {
         if (list) list.innerHTML = `<div class="text-center py-16 text-gray-400">
             <i class="fas fa-check-circle text-4xl text-green-400 mb-3 block"></i>
-            <p class="font-semibold">¡Todas las empresas tienen categoría!</p>
+            <p class="font-semibold">¡Todas las empresas tienen rubro!</p>
         </div>`;
         const allChk = document.getElementById('uncatSelectAll');
         if (allChk) allChk.disabled = true;
@@ -172,7 +172,7 @@ async function loadUncategorized(resetPage = false) {
         <div class="flex items-center gap-2 flex-shrink-0">
             <select class="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white max-w-[180px]"
                     id="catSel_${biz.id}">
-                <option value="">— Categoría —</option>
+                <option value="">— Rubro —</option>
                 ${buildUncatCatOptions()}
             </select>
             <button onclick="assignSingleCategory(${biz.id})"
@@ -223,7 +223,7 @@ function updateBulkBar() {
 async function assignSingleCategory(bizId) {
     const sel = document.getElementById(`catSel_${bizId}`);
     const catId = sel?.value;
-    if (!catId) { showToast('Elegí una categoría', 'error'); return; }
+    if (!catId) { showToast('Elegí un rubro', 'error'); return; }
     const res = await apiAdminPost('/businesses/bulk-category', {
         business_ids: [bizId], category_id: parseInt(catId)
     });
@@ -235,7 +235,7 @@ async function assignSingleCategory(bizId) {
 
 async function applyBulkCategory() {
     const catId = document.getElementById('uncatBulkCat')?.value;
-    if (!catId) { showToast('Elegí una categoría', 'error'); return; }
+    if (!catId) { showToast('Elegí un rubro', 'error'); return; }
     if (!_uncatSelected.size) { showToast('Seleccioná al menos una empresa', 'error'); return; }
     if (!confirm(`¿Asignar a ${_uncatSelected.size} empresa${_uncatSelected.size !== 1 ? 's' : ''}?`)) return;
 

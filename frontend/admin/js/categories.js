@@ -47,7 +47,7 @@ let _adminCategoriesCache = [];
 
 async function loadAdminCategories() {
     const data = await apiAdminGet('/categories');
-    if (!data.success) { showToast('Error cargando categorías', 'error'); return; }
+    if (!data.success) { showToast('Error cargando rubros', 'error'); return; }
 
     _adminCategoriesCache = data.data;
 
@@ -85,7 +85,7 @@ async function loadAdminCategories() {
     ordered.push(...orphans);
 
     document.getElementById('categoriesTable').innerHTML = ordered.length === 0
-        ? '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">No hay categorías</td></tr>'
+        ? '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">No hay rubros</td></tr>'
         : ordered.map(c => {
             const isChild = !!c.parent_id;
             const parentLabel = c.parent_name ? escapeHtml(c.parent_name) : '<span class="text-gray-300">—</span>';
@@ -98,7 +98,7 @@ async function loadAdminCategories() {
                     ${isChild
                         ? '<i class="fas fa-level-up-alt fa-rotate-90 text-gray-300 text-xs"></i>'
                         : (kidsCount > 0
-                            ? `<button onclick="toggleCatGroup(${c.id})" class="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-700 transition" title="Mostrar/ocultar subcategorías"><i class="fas fa-chevron-${collapsed ? 'right' : 'down'} text-xs" id="catChev${c.id}"></i></button>`
+                            ? `<button onclick="toggleCatGroup(${c.id})" class="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-700 transition" title="Mostrar/ocultar subrubros"><i class="fas fa-chevron-${collapsed ? 'right' : 'down'} text-xs" id="catChev${c.id}"></i></button>`
                             : '<span class="w-5"></span>')}
                     <div class="w-9 h-9 ${c.bg_color || 'bg-gray-100'} rounded-xl flex items-center justify-center ${c.color || 'text-gray-600'} text-base shrink-0">
                         <i class="fas ${c.icon || 'fa-tag'}"></i>
@@ -160,7 +160,7 @@ function openCategoryForm(clear = true) {
         document.getElementById('catFormOrder').value = '0';
         const parentSel = document.getElementById('catFormParent');
         if (parentSel) parentSel.value = '';
-        document.getElementById('categoryFormTitle').textContent = 'Nueva categoría';
+        document.getElementById('categoryFormTitle').textContent = 'Nuevo rubro';
     }
     document.getElementById('categoryFormPanel').classList.remove('hidden');
     initCatColorPresets(); // Sprint 7: paleta de colores
@@ -183,7 +183,7 @@ function editCategoryInline(id) {
     document.getElementById('catFormOrder').value = c.display_order || 0;
     const parentSel = document.getElementById('catFormParent');
     if (parentSel) parentSel.value = c.parent_id || '';
-    document.getElementById('categoryFormTitle').textContent = 'Editar categoría';
+    document.getElementById('categoryFormTitle').textContent = 'Editar rubro';
     if (typeof updateIconPreview === 'function') updateIconPreview();
     openCategoryForm(false);
 }
@@ -215,7 +215,7 @@ document.getElementById('categoryForm')?.addEventListener('submit', async functi
         ? await apiAdminPost(`/categories/${id}`, payload, 'PUT')
         : await apiAdminPost('/categories', payload);
     if (res.success) {
-        showToast(id ? 'Categoría actualizada' : 'Categoría creada');
+        showToast(id ? 'Rubro actualizado' : 'Rubro creado');
         closeCategoryForm();
         loadAdminCategories();
         loadCategoriesCache.clear?.();
@@ -226,9 +226,9 @@ document.getElementById('categoryForm')?.addEventListener('submit', async functi
 });
 
 async function deleteCategory(id, name) {
-    if (!confirm(`¿Eliminar la categoría "${name}"?`)) return;
+    if (!confirm(`¿Eliminar el rubro "${name}"?`)) return;
     const res = await apiAdminPost(`/categories/${id}`, {}, 'DELETE');
-    if (res.success) { showToast('Categoría eliminada'); loadAdminCategories(); categoriesCache = []; }
+    if (res.success) { showToast('Rubro eliminado'); loadAdminCategories(); categoriesCache = []; }
     else showToast('Error: ' + (res.error || 'No se pudo eliminar'), 'error');
 }
 

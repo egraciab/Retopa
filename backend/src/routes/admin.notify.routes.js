@@ -115,7 +115,7 @@ function buildEmailHTML(biz, cfg) {
         ${['✅ Aparecer primero en los resultados de búsqueda',
            '📝 Completar descripción, fotos y horarios',
            '📊 Ver estadísticas de visitas y contactos',
-           '🏷️ Gestionar tus categorías y servicios'].map(item =>
+           '🏷️ Gestionar tus rubros y servicios'].map(item =>
           `<li style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#334155">${item}</li>`
         ).join('')}
       </ul>

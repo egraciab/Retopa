@@ -6,6 +6,9 @@
 function openLoginModal() {
     document.getElementById('loginModal').classList.remove('hidden');
     document.body.style.overflow = 'hidden';
+    let mode = 'wa';
+    try { mode = localStorage.getItem('retopa_login_mode') || 'wa'; } catch (e) {}
+    setLoginMode(mode);
     // Si viene con ?reset=token, mostrar formulario de reset
     const resetToken = new URLSearchParams(window.location.search).get('reset');
     if (resetToken) { showLoginStep('resetForm'); }
@@ -35,7 +38,7 @@ function togglePwdPublic(id) {
 let _mfaUserId = null; // guardamos el user_id entre pasos del login
 
 function showLoginStep(step) {
-    ['loginForm','mfaStep','forgotForm','resetForm'].forEach(id => {
+    ['loginForm','mfaStep','forgotForm','resetForm','pwlessStep'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
     });
@@ -50,6 +53,90 @@ function openForgotPassword() {
 }
 
 function backToLogin() { showLoginStep('loginForm'); }
+
+// ── 2026-10-13: entrar con WhatsApp (+595) o correo; contraseña opcional ──────
+let _loginMode = 'wa';
+function setLoginMode(mode) {
+    _loginMode = mode === 'email' ? 'email' : 'wa';
+    try { localStorage.setItem('retopa_login_mode', _loginMode); } catch (e) {}
+    const wa = _loginMode === 'wa';
+    document.getElementById('loginWaBox')?.classList.toggle('hidden', !wa);
+    document.getElementById('loginEmailBox')?.classList.toggle('hidden', wa);
+    [['loginTabWa', wa], ['loginTabEmail', !wa]].forEach(([id, on]) => {
+        const b = document.getElementById(id); if (!b) return;
+        b.classList.toggle('bg-white', on); b.classList.toggle('shadow', on);
+        b.classList.toggle('text-gray-900', on); b.classList.toggle('text-gray-500', !on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+}
+// Celular PY → '+5959XXXXXXXX' (acepta 0981…, 981…, +595 981…) o null.
+function _mobilePY(raw) {
+    const m = String(raw || '').replace(/\D/g, '').match(/^(?:595|0)?(9\d{8})$/);
+    return m ? '+595' + m[1] : null;
+}
+// Lo que el usuario escribió como identificador, o {error}.
+function loginIdentifier() {
+    if (_loginMode === 'wa') {
+        const raw = document.getElementById('loginPhone')?.value || '';
+        const id = _mobilePY(raw);
+        return id ? { id } : { error: raw.trim() ? 'Revisá tu número de WhatsApp (ej: 981 123 456).' : 'Escribí tu número de WhatsApp.' };
+    }
+    const email = (document.getElementById('loginEmail')?.value || '').trim();
+    return /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email) ? { id: email } : { error: email ? 'Revisá tu correo.' : 'Escribí tu correo.' };
+}
+function _loginErr(msg) {
+    const errEl = document.getElementById('loginError');
+    if (!errEl) return;
+    errEl.textContent = msg; errEl.classList.toggle('hidden', !msg);
+}
+function openPasswordless(preMsg) {
+    const ident = loginIdentifier();
+    if (ident.error) { showLoginStep('loginForm'); _loginErr(ident.error); return; }
+    const wa = _loginMode === 'wa';
+    document.getElementById('pwlessIcon').className = wa ? 'fab fa-whatsapp text-green-600' : 'fas fa-envelope text-brand-600';
+    document.getElementById('pwlessText').textContent = wa
+        ? 'Se abre tu WhatsApp con un mensaje para RetoPA. Envialo y te respondemos con tu enlace para entrar.'
+        : 'Te mandamos un enlace a tu correo para entrar (vale 7 días).';
+    const btn = document.getElementById('pwlessBtn');
+    btn.innerHTML = wa ? '<i class="fab fa-whatsapp"></i> Pedir acceso por WhatsApp' : '<i class="fas fa-paper-plane"></i> Enviarme el enlace';
+    btn.style.background = wa ? '#16a34a' : '#1B3A6B';
+    btn.disabled = false;
+    const msg = document.getElementById('pwlessMsg');
+    msg.className = preMsg ? 'text-sm rounded-lg px-3 py-2 bg-amber-50 text-amber-800' : 'hidden';
+    msg.textContent = preMsg || '';
+    showLoginStep('pwlessStep');
+}
+async function submitPasswordless() {
+    const ident = loginIdentifier();
+    if (ident.error) { showLoginStep('loginForm'); _loginErr(ident.error); return; }
+    const wa = _loginMode === 'wa';
+    const btn = document.getElementById('pwlessBtn');
+    const msg = document.getElementById('pwlessMsg');
+    // WhatsApp: la pestaña se abre YA (dentro del toque) para que no la bloquee el navegador.
+    const win = wa ? window.open('about:blank', '_blank') : null;
+    btn.disabled = true;
+    const res = await apiPost('/auth/access-request', { identifier: ident.id });
+    btn.disabled = false;
+    if (!res || !res.success) {
+        if (win) win.close();
+        msg.className = 'text-sm rounded-lg px-3 py-2 bg-red-50 text-red-600';
+        msg.textContent = (res && res.error) || 'No pudimos procesar el pedido. Probá de nuevo.';
+        return;
+    }
+    if (wa && res.support_wa) {
+        const href = `https://wa.me/${res.support_wa}?text=${encodeURIComponent(res.wa_message || '')}`;
+        if (win) { try { win.opener = null; } catch (e) {} win.location.href = href; } else window.location.href = href;
+        msg.className = 'text-sm rounded-lg px-3 py-2 bg-green-50 text-green-700';
+        msg.textContent = 'Listo: enviá el mensaje en WhatsApp y te respondemos con tu enlace para entrar.';
+    } else if (wa) {
+        if (win) win.close();
+        msg.className = 'text-sm rounded-lg px-3 py-2 bg-green-50 text-green-700';
+        msg.textContent = 'Recibimos tu pedido: te escribimos por WhatsApp con tu enlace para entrar.';
+    } else {
+        msg.className = 'text-sm rounded-lg px-3 py-2 bg-green-50 text-green-700';
+        msg.textContent = res.message || 'Si hay una cuenta con ese correo, te llega un enlace para entrar.';
+    }
+}
 
 async function submitForgotPassword() {
     const email = document.getElementById('forgotEmail').value.trim();
@@ -174,10 +261,12 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
     e.preventDefault();
     const errEl = document.getElementById('loginError');
     errEl.classList.add('hidden');
-    const res = await apiPost('/auth/login', {
-        email: document.getElementById('loginEmail').value,
-        password: document.getElementById('loginPassword').value
-    });
+    const ident = loginIdentifier();
+    if (ident.error) { _loginErr(ident.error); return; }
+    const pwd = document.getElementById('loginPassword').value;
+    if (!pwd) { openPasswordless('Si no tenés contraseña, entrá con un enlace:'); return; }
+    const res = await apiPost('/auth/login', { email: ident.id, password: pwd });
+    if (!res.success && res.code === 'NO_PASSWORD') { openPasswordless(res.error); return; }
 
     if (res.success) {
         if (res.mfa_required) {
@@ -332,6 +421,27 @@ function checkSession() {
     // Link mágico de ACTIVACIÓN de cuenta (alta de ficha sin cuenta): ?activar=TOKEN
     const activarToken = new URLSearchParams(window.location.search).get('activar');
     if (activarToken) { openActivateScreen(activarToken); }
+
+    // E1 — LINK DE ACCESO de un solo uso (lo manda RetoPA por WhatsApp): ?acceso=TOKEN
+    const accesoToken = new URLSearchParams(window.location.search).get('acceso');
+    if (accesoToken) { handleAccessLink(accesoToken); }
+}
+
+// Entra con el link de acceso (sin contraseña) y lleva directo a Mi Portal.
+async function handleAccessLink(token) {
+    window.history.replaceState({}, '', '/'); // que el token no quede en la barra ni en el historial
+    const res = await apiPost('/auth/access-link', { token });
+    if (res && res.success && res.token) {
+        try {
+            localStorage.setItem('token', res.token);
+            localStorage.setItem('user', JSON.stringify(res.user));
+        } catch (e) {}
+        currentUser = res.user;
+        showToastPublic('¡Hola! Entrando a tu panel…', 'success');
+        setTimeout(() => { window.location.href = res.user && res.user.has_business ? '/cliente/' : '/'; }, 700);
+    } else {
+        showToastPublic((res && res.error) || 'Este enlace de acceso venció o ya se usó. Pedinos uno nuevo por WhatsApp.', 'error');
+    }
 }
 
 // Muestra el paso "creá tu contraseña" en modo activación de cuenta.

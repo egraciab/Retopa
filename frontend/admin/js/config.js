@@ -174,7 +174,7 @@ function showSection(section) {
         }
     }
 
-    const titles = { dashboard: 'Dashboard', businesses: 'Empresas', leads: 'Captación / Leads', prospectos: 'Prospectos', users: 'Usuarios', categories: 'Categorías', plans: 'Planes', cities: 'Ciudades', site: 'Sitio Web', import: 'Importar empresas', settings: 'Configuración', claims: 'Claims', templates: 'Plantillas', emaillogs: 'Logs de correos', notify: 'Notificar empresas', 'promotions-admin': 'Promociones', services: 'Servicios', uncategorized: 'Sin categoría', semaforo: 'Semáforo de ventas', 'plan-requests': 'Solicitudes de plan', monetizacion: 'Informe de monetización', signals: 'Disparadores de venta', logros: 'Logros' };
+    const titles = { dashboard: 'Dashboard', businesses: 'Empresas', leads: 'Captación / Leads', prospectos: 'Prospectos', users: 'Usuarios', categories: 'Rubros', plans: 'Planes', cities: 'Ciudades', site: 'Sitio Web', import: 'Importar empresas', settings: 'Configuración', claims: 'Claims', templates: 'Plantillas', emaillogs: 'Logs de correos', notify: 'Notificar empresas', 'promotions-admin': 'Promociones', services: 'Servicios', uncategorized: 'Sin rubro', semaforo: 'Semáforo de ventas', 'plan-requests': 'Solicitudes de plan', monetizacion: 'Informe de monetización', signals: 'Disparadores de venta', logros: 'Logros' };
     document.getElementById('pageTitle').textContent = titles[section] || section;
     currentSection = section;
 
@@ -432,7 +432,7 @@ async function loadCitiesCache() {
 
 // Build category <select> options HTML (agrupado padre/hijo con optgroup)
 function buildCategoryOptions(selectedId) {
-    const none = `<option value="">-- Sin categoría --</option>`;
+    const none = `<option value="">-- Sin rubro --</option>`;
     return none + buildCategoryGroupedHtml(parseInt(selectedId), new Set());
 }
 
@@ -524,7 +524,9 @@ const STATUS_CONFIG = {
     completed: { label: 'Ganado', badgeClass: 'badge-won', icon: 'fa-trophy', color: '#065f46' },
     // Estados de CAPTACIÓN (registros web autogestionados): Nuevo → Verificado / Descartado
     verificado: { label: 'Verificado', badgeClass: 'badge-verified', icon: 'fa-shield-alt', color: '#065f46' },
-    descartado: { label: 'Descartado', badgeClass: 'badge-inactive', icon: 'fa-ban', color: '#6b7280' }
+    descartado: { label: 'Descartado', badgeClass: 'badge-inactive', icon: 'fa-ban', color: '#6b7280' },
+    // Alta duplicada que se unió a una ficha existente (js/merge.js)
+    fusionado: { label: 'Fusionado', badgeClass: 'badge-inactive', icon: 'fa-code-merge', color: '#6d28d9' }
 };
 
 // ¿Es un lead de CAPTACIÓN (alta de ficha gratis) y no un lead de venta?

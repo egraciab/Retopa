@@ -153,7 +153,7 @@ const TEMPLATE_DEFS = [
         vars: ['{name}', '{businessName}', '{planLabel}', '{views}', '{whatsappClicks}', '{siteName}'],
         fields: [
             { key:'subject', label:'Asunto', type:'text', ph:'Tu plan {planLabel} venció — {businessName}' },
-            { key:'message', label:'Mensaje principal', type:'area', ph:'El plan {planLabel} de {businessName} venció y tu ficha volvió al plan gratuito. No borramos nada: tus categorías, galería y datos quedan guardados y vuelven al reactivar.' },
+            { key:'message', label:'Mensaje principal', type:'area', ph:'El plan {planLabel} de {businessName} venció y tu ficha volvió al plan gratuito. No borramos nada: tus rubros, galería y datos quedan guardados y vuelven al reactivar.' },
             { key:'cta', label:'Botón', type:'text', ph:'Reactivar mi plan' },
         ],
     },
@@ -287,7 +287,7 @@ function renderTemplatesUI() {
 
     container.innerHTML = `
       <div class="flex flex-wrap gap-2 mb-1" id="tplTabs">${tabs}</div>
-      <p class="text-[11px] text-gray-400 mb-4">${cards.length} plantilla${cards.length !== 1 ? 's' : ''} en esta categoría · el buscador de envío de abajo funciona con cualquiera.</p>
+      <p class="text-[11px] text-gray-400 mb-4">${cards.length} plantilla${cards.length !== 1 ? 's' : ''} en este rubro · el buscador de envío de abajo funciona con cualquiera.</p>
       <div class="space-y-4">${cards.map(_renderTplCard).join('')}</div>`;
 }
 

@@ -111,6 +111,8 @@ async function loadAdminLeads() {
 
     allLeadsCache = data.data || [];
     renderLeadsTable(allLeadsCache, search);
+    // Asistente de fichas duplicadas (js/merge.js)
+    if (typeof loadMergeAssistant === 'function') loadMergeAssistant();
 
     const pagination = data.pagination || { page: currentLeadPage, pages: 1, total: allLeadsCache.length, limit: leadsPerPage };
     renderLeadsPagination(pagination);
@@ -214,7 +216,10 @@ function renderLeadsTable(leads, search) {
                 </td>
                 <td class="px-6 py-4">${(isCap && (l.status || 'pending') === 'pending')
                     ? '<span class="badge badge-pending"><i class="fas fa-inbox"></i> Nuevo · por verificar</span>'
-                    : getStatusBadge(l.status || 'pending')}</td>
+                    : getStatusBadge(l.status || 'pending')}${(typeof mergeCandidateFor === 'function' && l.business_id && !l.business_merged_into && mergeCandidateFor(l.business_id))
+                    ? `<button type="button" onclick="openLeadModal(${l.id})" class="mt-1 block text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5" title="Coincide con una ficha que ya existe"><i class="fas fa-code-merge mr-1"></i>posible duplicado</button>` : ''}${l.business_merged_into
+                    ? `<span class="mt-1 block text-[11px] text-gray-500"><i class="fas fa-code-merge mr-1 text-violet-400"></i>en la ficha #${l.business_merged_into}</span>` : ''}${(isCap && l.status === 'verificado' && l.business_id && l.business_has_owner === false && !l.business_merged_into)
+                    ? `<button type="button" onclick="openLeadModal(${l.id})" class="mt-1 block text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5" title="Verificada pero sin dueño"><i class="fas fa-user-slash mr-1"></i>sin dueño</button>` : ''}</td>
                 <td class="px-6 py-4 text-sm text-gray-500 col-hide-mobile">${formatDate(l.created_at)}</td>
                 <td class="px-6 py-4 text-right">
                     <div class="flex gap-1 justify-end">
@@ -395,6 +400,7 @@ async function openLeadModal(id) {
     if (isCap) {
         // CAPTACIÓN: prospecto por verificar. Acciones: Verificar ficha / Descartar / (volver a) Nuevo
         statusButtonsHtml = `
+        <div id="leadMergeHint"></div>
         <div class="bg-sky-50 border border-sky-200 rounded-xl px-4 py-3 mb-4 flex items-start gap-3">
             <i class="fas fa-seedling text-sky-500 mt-0.5"></i>
             <div class="text-sm text-sky-800">
@@ -407,6 +413,9 @@ async function openLeadModal(id) {
             ${currentStatus !== 'verificado' ? `<button onclick="verifyFichaFromLead(${id})"
                 class="text-sm px-4 py-2 rounded-lg font-bold transition flex items-center gap-2 bg-green-500 text-white hover:bg-green-600 shadow-sm">
                 <i class="fas fa-shield-alt"></i> Verificar ficha</button>` : `<span class="text-sm px-4 py-2 rounded-lg font-bold flex items-center gap-2 bg-green-100 text-green-700"><i class="fas fa-check-circle"></i> Ficha verificada</span>`}
+            ${(currentStatus === 'verificado' && lead.business_id && lead.business_has_owner === false) ? `<button onclick="verifyFichaFromLead(${id}, true)"
+                class="text-sm px-4 py-2 rounded-lg font-bold transition flex items-center gap-2 bg-amber-500 text-white hover:bg-amber-600 shadow-sm" title="La ficha está verificada pero sin dueño">
+                <i class="fas fa-user-check"></i> Asignar a quien la registró</button>` : ''}
             ${currentStatus !== 'descartado' ? `<button onclick="updateLeadStatusFromModal(${id}, 'descartado')"
                 class="text-sm px-4 py-2 rounded-lg font-medium transition flex items-center gap-2 bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200">
                 <i class="fas fa-ban"></i> Descartar</button>` : ''}
@@ -582,7 +591,7 @@ async function openLeadModal(id) {
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="form-label">Categor&iacute;a</label>
+                        <label class="form-label">Rubro</label>
                         <select id="editBizCategory" class="form-input">
                             ${buildCategoryOptions(biz.category_id)}
                         </select>
@@ -677,6 +686,7 @@ async function openLeadModal(id) {
     `;
 
     document.getElementById('leadDetailModal').classList.remove('hidden');
+    if (isCap && typeof fillLeadMergeHint === 'function') fillLeadMergeHint(lead);
 }
 
 function switchLeadTab(tab) {
@@ -708,13 +718,19 @@ async function verifyClaimedBusiness(leadId) {
 // CAPTACIÓN → CONVERSIÓN: verificar la ficha desde el propio Lead.
 // Marca la empresa como verificada, envía el correo de verificación y crea
 // una oportunidad de onboarding SIN asignar (el admin la deriva luego).
-async function verifyFichaFromLead(leadId) {
-    if (!confirm('¿Verificar esta ficha?\n\n• La empresa quedará marcada como VERIFICADA\n• Se enviará el correo de verificación al dueño\n• Se creará una Oportunidad de onboarding (sin asignar) para derivar a un embajador')) return;
+async function verifyFichaFromLead(leadId, onlyOwner) {
+    if (!confirm(onlyOwner
+        ? '¿Asignar la ficha a quien la registró?\n\nSe busca su cuenta por el alta, el correo o el WhatsApp del formulario (si hay una sola).'
+        : '¿Verificar esta ficha?\n\n• La empresa quedará marcada como VERIFICADA\n• Si no tiene dueño, queda a nombre de quien la registró\n• Se enviará el correo de verificación al dueño\n• Se creará una Oportunidad de onboarding (sin asignar) para derivar a un embajador')) return;
     const res = await apiAdminPost(`/leads/${leadId}/verify-ficha`, {});
     if (!res || !res.success) return showToast('Error al verificar la ficha: ' + (res?.error || ''), 'error');
-    showToast(res.opportunity_created
+    const own = res.owner_linked
+        ? ` · dueño: ${res.owner_linked.name || 'su cuenta'} (por ${res.owner_linked.via})`
+        : (res.notify ? '' : ' · ⚠ no encontré la cuenta de quien la registró: asignala a mano');
+    showToast((onlyOwner ? '✅ Listo' : (res.opportunity_created
         ? '✅ Ficha verificada · oportunidad de onboarding creada (sin asignar)'
-        : '✅ Ficha verificada · ya existía una oportunidad activa para esta empresa', 'success');
+        : '✅ Ficha verificada · ya existía una oportunidad activa para esta empresa')) + own, res.owner_linked || res.notify ? 'success' : 'info');
+    if (res.notify && typeof showNotifyOwnerPanel === 'function') showNotifyOwnerPanel(onlyOwner ? 'Ficha asignada' : 'Ficha verificada', res.notify);
     closeModal('leadDetailModal');
     loadAdminLeads();
     if (typeof loadBusinesses === 'function') loadBusinesses();

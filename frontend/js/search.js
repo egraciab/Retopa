@@ -195,7 +195,7 @@ async function loadBusinesses(reset = true, targetId = 'resultsList') {
     if (!data) data = await apiGet(`/businesses?${params.toString()}`);
 
     if (!data.success) {
-        list.innerHTML = '<div class="text-center text-gray-500 py-8">Error al cargar empresas</div>';
+        list.innerHTML = '<div class="col-span-full text-center text-gray-500 py-8">Error al cargar empresas</div>';
         isLoading = false;
         updateActiveFilters();
         return;
@@ -215,7 +215,7 @@ async function loadBusinesses(reset = true, targetId = 'resultsList') {
     }
 
     if (data.data.length === 0 && reset) {
-        list.innerHTML = '<div class="text-center text-gray-500 py-12"><i class="fas fa-search text-4xl mb-3 text-gray-300 block"></i><p>No se encontraron resultados</p><p class="text-sm text-gray-400 mt-1">Intentá con otros términos o filtros</p></div>';
+        list.innerHTML = '<div class="col-span-full text-center text-gray-500 py-12"><i class="fas fa-search text-4xl mb-3 text-gray-300 block"></i><p>No se encontraron resultados</p><p class="text-sm text-gray-400 mt-1">Intentá con otros términos o filtros</p></div>';
         const moreWrap0 = document.getElementById('loadMoreWrap');
         if (moreWrap0) moreWrap0.classList.add('hidden');
         if (typeof rpSetFilterChipsState === 'function') rpSetFilterChipsState();
@@ -245,7 +245,8 @@ async function loadBusinesses(reset = true, targetId = 'resultsList') {
     if (viewMode === 'list') {
         list.className = 'space-y-2 results-section';
     } else {
-        list.className = 'space-y-4 results-section';
+        // Tarjetas compactas: 1 columna en mobile, 2 en pantallas anchas (no se estiran).
+        list.className = 'grid grid-cols-1 lg:grid-cols-2 gap-3 results-section';
     }
 
     const html = data.data.map(biz =>
@@ -332,8 +333,14 @@ function renderBusinessCard(biz) {
     const distBadge = (typeof renderDistanceBadge === 'function') ? renderDistanceBadge(biz) : '';
     const meta = `<span>${metaBits.join(' · ')}</span>${distBadge}`;
 
-    // Estado (abierto/cerrado) + rating o "Sin reseñas aún"
-    const hours = renderHoursCompact(biz);
+    // Estado (abierto/cerrado) + rating o "Sin reseñas aún". Si la ficha no cargó
+    // horario, en vez de "Sin horario" mostramos un dato real que sí tiene: la dirección.
+    const hasHours = !!(biz.hoursJson || biz.hours_json || (biz.hours && String(biz.hours).trim()));
+    const addr = String(biz.address || '').trim();
+    const hours = hasHours ? renderHoursCompact(biz) : '';
+    const addrLine = (!hasHours && addr)
+        ? `<div class="rp-card-addr" title="${esc(addr)}"><i class="fas fa-location-dot" style="color:#94a3b8"></i> ${esc(addr)}</div>`
+        : '';
     const hasReviews = (Number(biz.reviewCount) || 0) > 0;
     const rating = hasReviews
         ? `<span style="font-weight:700;color:var(--rp-ink)"><i class="fas fa-star" style="color:#E8B84B"></i> ${Number(biz.rating).toFixed(1)} <span style="color:var(--rp-ink-2);font-weight:500">(${biz.reviewCount})</span></span>`
@@ -358,7 +365,8 @@ function renderBusinessCard(biz) {
         <div class="rp-card-body">
             <div class="rp-card-title"><span class="rp-name">${esc(name)}</span>${verified}</div>
             <div class="rp-card-meta">${meta}</div>
-            <div class="rp-card-status"><span>${hours}</span>${dot}${rating}${likes ? dot + likes : ''}</div>
+            ${addrLine}
+            <div class="rp-card-status">${hours ? `<span>${hours}</span>${dot}` : ''}${rating}${likes ? dot + likes : ''}</div>
             <div class="rp-card-actions">${actions}</div>
         </div>
     </div>`;
