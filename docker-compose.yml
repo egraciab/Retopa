@@ -86,9 +86,16 @@ services:
     image: nginx:1.27-alpine
     container_name: retopa-nginx
     restart: unless-stopped
+    # nginx resuelve "retopa-backend"/"retopa-frontend" UNA vez al arrancar. Si un rebuild
+    # recrea esos contenedores con otra IP, nginx queda apuntando a la vieja → 502.
+    # restart: true → Compose reinicia nginx cada vez que recrea uno de ellos (Compose ≥ 2.17).
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_started
+        restart: true
+      backend:
+        condition: service_started
+        restart: true
     ports:
       - "80:80"
     volumes:
