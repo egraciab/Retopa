@@ -36,6 +36,19 @@ router.use(requireAdmin);
 
 const ESTADOS = ['pendiente', 'enviado', 'respondio', 'reclamo', 'rechazo', 'no_es'];
 
+// Clave de WhatsApp de la ficha = la misma que phoneToWa() (utils/phone.js): solo
+// dígitos, con 595. prospect_wa_outreach guarda esa forma; businesses.whatsapp puede
+// estar como '595…' o '+595…' (el portal normaliza al guardar). Comparar el texto
+// crudo hacía que las fichas editadas por su dueño volvieran solas a "pendiente".
+const WA_KEY_SQL = `(
+    SELECT CASE
+        WHEN d = '' THEN NULL
+        WHEN d LIKE '595%' AND length(d) BETWEEN 11 AND 13 THEN d
+        WHEN d LIKE '0%'   AND length(d) BETWEEN 9  AND 11 THEN '595' || substr(d, 2)
+        WHEN length(d) BETWEEN 7 AND 10 THEN '595' || d
+        ELSE d END
+      FROM (SELECT regexp_replace(COALESCE(b.whatsapp, ''), '\\D', '', 'g') AS d) x)`;
+
 async function getSiteUrl() {
     try {
         const r = await pool.query("SELECT value FROM site_config WHERE key='site_url'");
@@ -115,7 +128,7 @@ router.get('/', async (req, res) => {
 
         // Rubro primario por ficha vía LATERAL (business_categories.is_primary).
         const sql = `
-            SELECT b.id, b.name, b.trade_name, b.slug, b.whatsapp, b.city,
+            SELECT b.id, b.name, b.trade_name, b.slug, wk.whatsapp, b.city,
                    pc.name AS rubro, pc.slug AS rubro_slug,
                    po.estado, po.fecha_contacto, po.notas
             FROM businesses b
@@ -127,7 +140,8 @@ router.get('/', async (req, res) => {
                 ORDER BY bc.is_primary DESC, bc.position ASC
                 LIMIT 1
             ) pc ON TRUE
-            LEFT JOIN prospect_wa_outreach po ON po.whatsapp = b.whatsapp
+            CROSS JOIN LATERAL (SELECT ${WA_KEY_SQL} AS whatsapp) wk
+            LEFT JOIN prospect_wa_outreach po ON po.whatsapp = wk.whatsapp
             WHERE ${where}
             ORDER BY b.name ASC`;
         const { rows } = await pool.query(sql, params);

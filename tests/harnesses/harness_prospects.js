@@ -52,10 +52,12 @@ const TOKEN = jwt.sign({ id: 1, role: 'admin', email: 'a@x.com' }, process.env.J
      (6,'Taller Don José','Taller Don José','taller-jose','595983333333','Luque','prospeccion_agente'),
      (7,'Sin Whats Uno','Sin Whats Uno','sinwa-1',NULL,'Asunción','prospeccion_agente'),
      (8,'Sin Whats Dos','Sin Whats Dos','sinwa-2',NULL,'Luque','prospeccion_agente'),
-     (9,'Manual Business','Manual Business','manual-1','595984444444','Asunción','manual')`);
+     (9,'Manual Business','Manual Business','manual-1','595984444444','Asunción','manual'),
+     (10,'Gomería Dueño Editó','Gomería Dueño Editó','gomeria-plus','+595985555555','Capiatá','prospeccion_agente'),
+     (11,'Gomería Local','Gomería Local','gomeria-local','0985555555','Capiatá','prospeccion_agente')`);
   // Rubro primario
   await c.query(`INSERT INTO business_categories (business_id,category_id,is_primary,"position") VALUES
-     (1,1,true,0),(2,1,true,0),(3,1,true,0),(4,1,true,0),(5,2,true,0),(6,3,true,0),(7,1,true,0),(8,2,true,0),(9,1,true,0)`);
+     (1,1,true,0),(2,1,true,0),(3,1,true,0),(4,1,true,0),(5,2,true,0),(6,3,true,0),(7,1,true,0),(8,2,true,0),(9,1,true,0),(10,3,true,0),(11,3,true,0)`);
 
   const router = require(BE + '/src/routes/prospects.routes.js');
   const app = express(); app.use(express.json()); app.use('/api/v2/admin/prospects', router);
@@ -72,7 +74,7 @@ const TOKEN = jwt.sign({ id: 1, role: 'admin', email: 'a@x.com' }, process.env.J
   // ── /sources ──
   const src = await get('/sources');
   const proSrc = (src.body?.data || []).find(s => s.source === 'prospeccion_agente');
-  check('/sources lista orígenes con conteo', src.status === 200 && proSrc && proSrc.count === 8, JSON.stringify(src.body?.data));
+  check('/sources lista orígenes con conteo', src.status === 200 && proSrc && proSrc.count === 10, JSON.stringify(src.body?.data));
 
   // ── / (agrupado) ──
   const all = await get('/?source=prospeccion_agente');
@@ -114,6 +116,17 @@ const TOKEN = jwt.sign({ id: 1, role: 'admin', email: 'a@x.com' }, process.env.J
   check('búsqueda q=nabil', (fQ.body?.data || []).length === 1 && fQ.body.data[0].whatsapp === '595981111111');
   const fEstado = await get('/?source=prospeccion_agente&estado=respondio');
   check('filtro estado=respondio (Nabil)', (fEstado.body?.data || []).length === 1 && fEstado.body.data[0].whatsapp === '595981111111');
+
+  // ── Formato del número: '+595…' (normalizado por el portal) y '09…' = mismo contacto ──
+  // Bug 2026-10-26: el JOIN comparaba texto crudo → la ficha con '+595…' volvía sola a
+  // "pendiente" aunque se marcara enviada (la fila se guarda con solo dígitos).
+  const gom = (after.body?.data || []).find(g => g.whatsapp === '595985555555');
+  check("'+595…' y '09…' del mismo número = 1 grupo, clave solo dígitos", gom && gom.count === 2, gom ? 'count=' + gom.count : JSON.stringify((after.body?.data || []).map(g => g.whatsapp)));
+  const pg = await patch('/outreach/595985555555', { estado: 'enviado' });
+  const gom2 = ((await get('/?source=prospeccion_agente')).body?.data || []).find(g => g.whatsapp === '595985555555');
+  check("ficha con '+595…' queda \"enviado\" después del PATCH", pg.status === 200 && gom2 && gom2.estado === 'enviado', gom2 && gom2.estado);
+  const dup = await c.query(`SELECT count(*)::int AS n FROM prospect_wa_outreach WHERE whatsapp LIKE '%985555555'`);
+  check('una sola fila de seguimiento para ese número', dup.rows[0].n === 1, 'n=' + dup.rows[0].n);
 
   // ── source requerido ──
   const noSrc = await get('/');

@@ -14,7 +14,7 @@ const { sendEmail } = require('../config/mail');
 const rateLimit = require('express-rate-limit');
 const { logClaimEvent, CLIENT_EVENTS } = require('../utils/claimEvents');
 const { mobilePY, mobileLocal, loadRubros, suggestRubro } = require('../helpers/claimFlow');
-const { normalizePhone } = require('../utils/phone');
+const { normalizePhone, phoneToWa } = require('../utils/phone');
 const redisClient = require('../config/redis');
 
 const JWT_SECRET = require('../config/jwt');
@@ -275,11 +275,11 @@ router.post('/confirm', confirmLimiter, async (req, res) => {
             [biz.id, biz.trade_name || biz.name, name, email || null, '+' + wa,
              JSON.stringify({ source: 'token_auto', rubro: rub.rows[0].name, utm_source: evBase.source || null, phone_verified: phoneVerified })]);
 
-        if (biz.whatsapp) {
+        if (phoneToWa(biz.whatsapp)) {
             await client.query(
                 `INSERT INTO prospect_wa_outreach (whatsapp, estado, created_at, updated_at)
                  VALUES ($1, 'reclamo', NOW(), NOW())
-                 ON CONFLICT (whatsapp) DO UPDATE SET estado='reclamo', updated_at=NOW()`, [biz.whatsapp]);
+                 ON CONFLICT (whatsapp) DO UPDATE SET estado='reclamo', updated_at=NOW()`, [phoneToWa(biz.whatsapp)]);
         }
 
         await client.query('COMMIT');
@@ -340,14 +340,14 @@ router.post('/not-mine', confirmLimiter, async (req, res) => {
         if (r.rows.length) {
             const biz = r.rows[0];
             logClaimEvent(pool, { event: 'not_mine', canal: 'token', source: b.src, visit: b.v, businessId: biz.id });
-            if (biz.whatsapp) {
+            if (phoneToWa(biz.whatsapp)) {
                 const nota = `[No es suyo: ${biz.trade_name || biz.name} · ${new Date().toISOString().slice(0, 10)}]`;
                 await pool.query(
                     `INSERT INTO prospect_wa_outreach (whatsapp, estado, notas, created_at, updated_at)
                      VALUES ($1, 'no_es', $2, NOW(), NOW())
                      ON CONFLICT (whatsapp) DO UPDATE SET estado='no_es',
                         notas = TRIM(BOTH ' ' FROM COALESCE(prospect_wa_outreach.notas,'') || ' ' || EXCLUDED.notas),
-                        updated_at = NOW()`, [biz.whatsapp, nota]).catch(e => console.warn('[Claim] not-mine outreach:', e.message));
+                        updated_at = NOW()`, [phoneToWa(biz.whatsapp), nota]).catch(e => console.warn('[Claim] not-mine outreach:', e.message));
             }
         }
     } catch (e) { console.warn('[Claim] not-mine:', e.message); }
