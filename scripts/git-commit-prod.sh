@@ -41,7 +41,7 @@ git commit -q -F - <<MSG
 Producción al $(date +%F): paquetes aplicados desde el último commit
 
 Paquetes (según _deploy/DEPLOY_*.txt posteriores a $(git log -1 --format=%h)): ${PKGS:-ver git diff}
-$N archivos. Incluye scripts/anonimizar-dev v2 y scripts/sync-dev-desde-prod.sh.
+$N archivos.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01UJyKHiik27jt1q5QUv3Ms5
