@@ -3302,13 +3302,17 @@ router.get('/claim-requests', async (req, res) => {
   try {
     const ok = await pool.query("SELECT to_regclass('public.claim_requests') IS NOT NULL AS ok");
     if (!ok.rows[0].ok) return res.json({ success: true, data: [] });
+    // ?status=sent → los ya mandados (7 días): para reenviar si el chat no llegó a salir.
+    const sent = req.query.status === 'sent';
     const { rows } = await pool.query(`
       SELECT cr.id, cr.business_id, cr.kind, cr.phone, cr.code, cr.name, cr.email, cr.message, cr.created_at,
+             cr.status, cr.handled_at,
              COALESCE(NULLIF(b.trade_name,''), b.name) AS business, b.slug, b.city, b.verified,
              EXISTS (SELECT 1 FROM user_businesses ub WHERE ub.business_id = b.id AND ub.is_owner) AS has_owner
         FROM claim_requests cr JOIN businesses b ON b.id = cr.business_id
-       WHERE cr.status = 'pending' AND cr.created_at > NOW() - interval '30 days'
-       ORDER BY cr.created_at DESC LIMIT 100`);
+       WHERE ${sent ? "cr.status = 'sent' AND cr.handled_at > NOW() - interval '7 days'"
+                    : "cr.status = 'pending' AND cr.created_at > NOW() - interval '30 days'"}
+       ORDER BY ${sent ? 'cr.handled_at' : 'cr.created_at'} DESC LIMIT 100`);
     res.json({ success: true, data: rows });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });

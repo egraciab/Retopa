@@ -285,18 +285,34 @@ async function grantClaimAccess(businessId) {
 // revision: pidió con otro número. En los dos casos: "Mandar link" abre el chat
 // con su link de reclamo (el flujo de siempre, sin contraseña).
 const _fmtPY = wa => { const m = String(wa || '').match(/^595(9\d{2})(\d{3})(\d{3})$/); return m ? `0${m[1]} ${m[2]} ${m[3]}` : (wa || ''); };
+// Vista 'sent': los ya mandados (7 días). "Mandar link" los saca de pendientes aunque
+// el chat no haya llegado a salir (pestaña bloqueada/cerrada) → desde acá se reenvían.
+let _crView = 'pending';
+function setClaimRequestsView(v) { _crView = v; loadClaimRequests(); }
 async function loadClaimRequests() {
     const box = document.getElementById('claimRequests');
     if (!box) return;
-    const data = await apiAdminGet('/claim-requests');
-    const rows = (data && data.success && data.data) || [];
-    if (!rows.length) { box.innerHTML = ''; return; }
+    const [pend, sentRes] = await Promise.all([apiAdminGet('/claim-requests'), apiAdminGet('/claim-requests?status=sent')]);
+    const pending = (pend && pend.success && pend.data) || [];
+    const sent = (sentRes && sentRes.success && sentRes.data) || [];
+    if (!pending.length && !sent.length) { box.innerHTML = ''; return; }
+    if (_crView === 'sent' && !sent.length) _crView = 'pending';
+    const isSent = _crView === 'sent';
+    const rows = isSent ? sent : pending;
     const ago = ts => { const m = (Date.now() - new Date(ts).getTime()) / 60000;
         return m < 60 ? `hace ${Math.max(1, Math.round(m))} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`; };
+    const tab = (v, label, n) => `<button onclick="setClaimRequestsView('${v}')" class="text-xs font-bold px-3 py-1 rounded-full border ${_crView === v ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'}">${label} · ${n}</button>`;
     box.innerHTML = `
     <div class="bg-white rounded-2xl border border-amber-200 shadow-sm p-4 mb-6" id="crCard">
-        <h3 class="text-sm font-bold text-gray-900 mb-1"><i class="fas fa-store text-amber-500 mr-1"></i> Pedidos de reclamo desde la ficha · ${rows.length}</h3>
-        <p class="text-xs text-gray-500 mb-3">Con <b>código</b>: mandale el link solo si el chat llegó <b>desde el número indicado</b> con ese código. Sin código: revisá lo que cuenta antes de mandarlo.</p>
+        <div class="flex items-center gap-2 flex-wrap mb-1">
+            <h3 class="text-sm font-bold text-gray-900 mr-auto"><i class="fas fa-store text-amber-500 mr-1"></i> Pedidos de reclamo desde la ficha</h3>
+            ${tab('pending', 'Pendientes', pending.length)}
+            ${sent.length ? tab('sent', 'Enviados (7 días)', sent.length) : ''}
+        </div>
+        <p class="text-xs text-gray-500 mb-3">${isSent
+            ? 'Ya les mandaste el link. Si el chat no llegó a salir o no lo encuentra, <b>reenviáselo</b>: es el mismo link. Cuando reclama, aparece “ya tiene dueño”.'
+            : 'Con <b>código</b>: mandale el link solo si el chat llegó <b>desde el número indicado</b> con ese código. Sin código: revisá lo que cuenta antes de mandarlo.'}</p>
+        ${rows.length ? '' : '<div class="text-xs text-gray-400 py-2">No hay pedidos pendientes.</div>'}
         <div class="space-y-2">${rows.map(r => `
             <div class="cr-row border border-gray-100 rounded-xl p-3" data-cr="${r.id}">
                 <div class="flex items-start gap-3 flex-wrap">
@@ -307,14 +323,14 @@ async function loadClaimRequests() {
                             <span class="font-normal text-gray-400 text-xs">${escapeHtml(r.city || '')}</span>
                         </div>
                         ${r.kind === 'whatsapp'
-                            ? `<div class="text-xs text-gray-700 mt-0.5"><i class="fab fa-whatsapp text-green-500"></i> Tiene que escribir desde <b>${escapeHtml(_fmtPY(r.phone))}</b> con el código <b class="font-mono">${escapeHtml(r.code || '')}</b></div>`
+                            ? `<div class="text-xs text-gray-700 mt-0.5"><i class="fab fa-whatsapp text-green-500"></i> ${isSent ? 'Escribió desde' : 'Tiene que escribir desde'} <b>${escapeHtml(_fmtPY(r.phone))}</b> con el código <b class="font-mono">${escapeHtml(r.code || '')}</b></div>`
                             : `<div class="text-xs text-gray-700 mt-0.5"><i class="fas fa-user-clock text-amber-500"></i> <b>${escapeHtml(r.name || '')}</b> · ${escapeHtml(_fmtPY(r.phone))}${r.email ? ' · ' + escapeHtml(r.email) : ''} <span class="text-amber-700">(otro número: revisar)</span></div>
                                ${r.message ? `<div class="text-xs text-gray-500 mt-1 italic">“${escapeHtml(r.message)}”</div>` : ''}`}
-                        <div class="text-[11px] text-gray-400 mt-0.5">${ago(r.created_at)}${r.has_owner ? ' · <span class="text-red-600 font-semibold">ya tiene dueño</span>' : ''}</div>
+                        <div class="text-[11px] text-gray-400 mt-0.5">${isSent ? `pedido ${ago(r.created_at)} · link enviado ${ago(r.handled_at)}` : ago(r.created_at)}${r.has_owner ? ` · <span class="${isSent ? 'text-green-600' : 'text-red-600'} font-semibold">ya tiene dueño</span>` : ''}</div>
                     </div>
                     <div class="flex items-center gap-1">
-                        ${r.has_owner ? '' : `<button onclick="sendClaimRequestLink(${r.id})" class="bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-3 py-2 rounded-lg"><i class="fab fa-whatsapp mr-1"></i> Mandar link</button>`}
-                        <button onclick="dismissClaimRequest(${r.id})" class="text-xs text-gray-500 hover:text-gray-800 px-2 py-2">Descartar</button>
+                        ${r.has_owner ? '' : `<button onclick="sendClaimRequestLink(${r.id})" class="bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-3 py-2 rounded-lg"><i class="fab fa-whatsapp mr-1"></i> ${isSent ? 'Reenviar link' : 'Mandar link'}</button>`}
+                        ${isSent ? '' : `<button onclick="dismissClaimRequest(${r.id})" class="text-xs text-gray-500 hover:text-gray-800 px-2 py-2">Descartar</button>`}
                     </div>
                 </div>
             </div>`).join('')}
