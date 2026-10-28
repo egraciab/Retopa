@@ -81,7 +81,11 @@ mock('config/mail', { sendEmail: async (to, template, data) => { sent.push({ to,
   app.use('/api/v2/admin', require(path.join(SRC, 'routes/admin')));
   const server = await new Promise(res => { const s = app.listen(0, '127.0.0.1', () => res(s)); });
   const port = server.address().port;
+  // 2026-10-28: registro, reclamo y alta exigen la casilla de Términos (acepta_terminos).
+  const ACEPTA = /\/(auth\/register|claim\/confirm|claim\/alta)$/;
+  const withTerms = (p, body) => (body && ACEPTA.test(p) && body.acepta_terminos === undefined) ? { ...body, acepta_terminos: true } : body;
   const call = (method, p, body, auth) => new Promise((resolve, reject) => {
+    body = withTerms(p, body);
     const data = body ? JSON.stringify(body) : null;
     const req = http.request({ host: '127.0.0.1', port, path: p, method,
       headers: { ...(data ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } : {}), ...(auth ? { Authorization: auth } : {}) } },

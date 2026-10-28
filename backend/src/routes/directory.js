@@ -553,6 +553,21 @@ router.get('/gallery/:id', async (req, res) => {
 // ============================================
 // PERFIL DE EMPRESA (con reviews)
 // ============================================
+// Orígenes de ficha que se atribuyen a una fuente pública: {"DNCP": "DNCP — contrataciones.gov.py"}.
+// Editable en Admin → Páginas legales. Caché 5 min en Redis.
+async function publicSources() {
+    const hit = await getCache('dir:legal-fuentes');
+    if (hit) return hit;
+    let map = {};
+    try {
+        const r = await pool.query("SELECT value FROM site_config WHERE key = 'legal_fuentes_publicas'");
+        const j = r.rows.length ? JSON.parse(r.rows[0].value || '{}') : {};
+        if (j && typeof j === 'object' && !Array.isArray(j)) map = j;
+    } catch (e) { map = {}; }
+    await setCache('dir:legal-fuentes', map, 300);
+    return map;
+}
+
 router.get('/businesses/:slug', async (req, res) => {
     try {
         const { slug } = req.params;
@@ -573,6 +588,7 @@ router.get('/businesses/:slug', async (req, res) => {
                        b.image_url as "imageUrl",
                        b.cover_url as "coverUrl", b.cover_focal_x as "coverFocalX", b.cover_focal_y as "coverFocalY",
                        b.plan_type as "planType",
+                       b.source AS "_source", to_char(b.created_at, 'YYYY-MM-DD') AS "_createdDate",
                        b.rating, b.review_count as "reviewCount",
                        fn_quality_score(b.*) AS "qualityScore",
                        fn_profile_completion(b.*) AS completion,
@@ -620,7 +636,7 @@ router.get('/businesses/:slug', async (req, res) => {
             if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Not found' });
 
             const reviews = await pool.query(`
-                SELECT id, author_name as "authorName", author_email as "authorEmail", 
+                SELECT id, author_name as "authorName",
                        rating, comment, is_approved as "isApproved", created_at as "createdAt",
                        owner_reply as "ownerReply", owner_replied_at as "ownerRepliedAt"
                 FROM reviews 
@@ -641,7 +657,12 @@ router.get('/businesses/:slug', async (req, res) => {
                 gallery = galleryResult.rows;
             }
 
-            data = { ...bizData, reviews: reviews.rows, gallery };
+            // Atribución de fuente pública (Decreto 4064/2015): solo los orígenes que
+            // figuran en site_config.legal_fuentes_publicas. El origen crudo no se publica.
+            const { _source, _createdDate, ...bizPublic } = bizData;
+            const fuente = (await publicSources())[_source];
+            data = { ...bizPublic, reviews: reviews.rows, gallery,
+                     publicSource: fuente ? { fuente, fecha: _createdDate } : null };
             await setCache(cacheKey, data, 60); // 60s — balance entre performance y sincronía
         }
         res.json({ success: true, data });
@@ -1015,7 +1036,9 @@ router.get('/site-config', async (req, res) => {
         'section_planes_enabled','section_servicios_enabled','section_promos_enabled',
         'reg_banner_enabled','reg_banner_delay_s','reg_banner_cooldown_days',
         'reg_banner_title','reg_banner_subtitle','reg_banner_cta','reg_banner_note',
-        'achievements_config')`
+        'achievements_config',
+        'legal_razon_social','legal_ruc','legal_banner_hasta',
+        'legal_terminos_version','legal_privacidad_version')`
     );
     const config = {};
     result.rows.forEach(r => { config[r.key] = r.value || ''; });

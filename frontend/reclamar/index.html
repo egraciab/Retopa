@@ -31,6 +31,8 @@
     .field { margin-bottom:16px; }
     .err { display:none; background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; font-size:14px; border-radius:12px; padding:12px 14px; margin-bottom:14px; }
     .ferr { display:none; color:#b91c1c; font-size:12px; margin:5px 0 0; }
+    .chk { display:flex; gap:10px; align-items:flex-start; font-size:13.5px; color:#334155; line-height:1.45; cursor:pointer; }
+    .chk input { margin-top:2px; width:18px; height:18px; flex:none; }
     .pill { display:flex; align-items:center; gap:10px; border:2px solid var(--sky); background:#f0f9ff; border-radius:14px; padding:12px 14px; }
     .pill b { flex:1; font-size:15px; }
     .link { background:none; border:none; color:var(--sky); font-weight:700; font-size:13px; cursor:pointer; padding:6px 0; }
@@ -219,9 +221,16 @@
       </div>
       <p id="loggedAs" class="hint hide" style="margin:-4px 0 14px"></p>
 
+      <div class="field" id="termsField">
+        <label class="chk"><input id="chkTerms" type="checkbox">
+          <span>Leí y acepto los <a href="/terminos.html" target="_blank" rel="noopener" style="color:var(--sky)">Términos</a> y la <a href="/privacidad.html" target="_blank" rel="noopener" style="color:var(--sky)">Política de Privacidad</a><span id="legalVer"></span></span></label>
+        <p id="errTerms" class="ferr">Para seguir, marcá que aceptás los Términos y la Política de Privacidad.</p>
+        <label class="chk" style="margin-top:8px"><input id="chkMarketing" type="checkbox">
+          <span>Quiero recibir novedades y ofertas de RetoPA por correo y WhatsApp <span style="color:#94a3b8">(opcional)</span></span></label>
+      </div>
+
       <button id="btnSubmit" class="btn btn-main" type="button" onclick="submitMain()">Listo, es mío <i class="fas fa-arrow-right"></i></button>
       <div class="perks"><span>Gratis</span><span>Sin contraseña</span><span>30 segundos</span></div>
-      <p class="hint center" style="margin-top:12px">Al continuar aceptás los <a href="/terminos.html" target="_blank" style="color:var(--sky)">términos de uso</a>.</p>
     </div>
   </div>
 
@@ -289,6 +298,11 @@
     const MODE = /^\/registrar/.test(location.pathname) || _qs.get('alta') === '1' ? 'alta' : (_qs.get('ficha') ? 'ficha' : 'token');
     let fichaSlug = _qs.get('ficha'), altaForce = false;
     const session = (() => { try { const t = localStorage.getItem('token'), u = JSON.parse(localStorage.getItem('user') || 'null'); return t && u ? { token: t, user: u } : null; } catch (e) { return null; } })();
+    // Versión vigente de Términos/Privacidad junto a la casilla (informativo).
+    fetch('/api/v2/site-config').then(r => r.json()).then(d => {
+      const c = (d && d.data) || {};
+      if (c.legal_terminos_version) $('legalVer').textContent = ` (versión ${c.legal_terminos_version}${c.legal_privacidad_version && c.legal_privacidad_version !== c.legal_terminos_version ? ' / ' + c.legal_privacidad_version : ''})`;
+    }).catch(() => {});
     const BTN_LABEL = { token: 'Listo, es mío <i class="fas fa-arrow-right"></i>', ficha: 'Enviar pedido <i class="fas fa-paper-plane"></i>', alta: 'Crear mi negocio gratis <i class="fas fa-arrow-right"></i>' };
     function submitMain() { return MODE === 'alta' ? submitAlta() : MODE === 'ficha' ? submitRevision() : submitClaim(); }
 
@@ -392,14 +406,16 @@
       if (!mobilePY(wa)) bad.push(['errWa', 'whatsapp_invalid']);
       if (name.length < 2) bad.push(['errName', 'name_missing']);
       if (email && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) bad.push(['errEmail', 'email_invalid']);
-      ['errRubro', 'errWa', 'errName', 'errEmail'].forEach(id => fieldErr(id, bad.some(b => b[0] === id)));
+      if (!$('chkTerms').checked) bad.push(['errTerms', 'terms_required']);
+      ['errRubro', 'errWa', 'errName', 'errEmail', 'errTerms'].forEach(id => fieldErr(id, bad.some(b => b[0] === id)));
       if (bad.length) { trackClaim('form_error', bad[0][1]); $(bad[0][0]).scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
 
       const btn = $('btnSubmit');
       btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Un segundo…';
       try {
         const res = await fetch(`${API}/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: claimToken, category_id: chosenRubro.id, whatsapp: wa, name, email, src: claimSrc, v: claimVisit }) });
+          body: JSON.stringify({ token: claimToken, category_id: chosenRubro.id, whatsapp: wa, name, email, src: claimSrc, v: claimVisit,
+                                 acepta_terminos: $('chkTerms').checked, marketing_opt_in: $('chkMarketing').checked }) });
         const data = await res.json();
         if (!data.success) {
           btn.disabled = false; btn.innerHTML = 'Listo, es mío <i class="fas fa-arrow-right"></i>';
@@ -478,6 +494,7 @@
       $('revisionIntro').classList.remove('hide');
       $('rubroField').classList.add('hide');
       $('messageField').classList.remove('hide');
+      $('termsField').classList.add('hide');
       $('hintWa').textContent = 'Te escribimos a este número para darte acceso.';
       $('btnSubmit').innerHTML = BTN_LABEL.ficha;
       document.querySelector('#formCard .perks').classList.add('hide');
@@ -576,7 +593,8 @@
       if (!mobilePY(wa)) bad.push('errWa');
       if (!session && name.length < 2) bad.push('errName');
       if (!session && email && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) bad.push('errEmail');
-      ['errBizName', 'errCity', 'errRubro', 'errWa', 'errName', 'errEmail'].forEach(id => fieldErr(id, bad.includes(id)));
+      if (!$('chkTerms').checked) bad.push('errTerms');
+      ['errBizName', 'errCity', 'errRubro', 'errWa', 'errName', 'errEmail', 'errTerms'].forEach(id => fieldErr(id, bad.includes(id)));
       if (bad.length) { $(bad[0]).scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
       const btn = $('btnSubmit'); btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creando…';
       const reset = () => { btn.disabled = false; btn.innerHTML = BTN_LABEL.alta; };
@@ -585,7 +603,8 @@
         if (session) headers.Authorization = 'Bearer ' + session.token;
         const res = await fetch(`${API}/alta`, { method: 'POST', headers, body: JSON.stringify({
           business_name: bizName, category_id: chosenRubro.id, city, whatsapp: wa, name, email,
-          force: altaForce, plan: _qs.get('plan') || null }) });
+          force: altaForce, plan: _qs.get('plan') || null,
+          acepta_terminos: $('chkTerms').checked, marketing_opt_in: $('chkMarketing').checked }) });
         const data = await res.json();
         reset();
         if (!data.success) {

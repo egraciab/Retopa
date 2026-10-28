@@ -713,12 +713,17 @@
                     <a href="/privacidad.html" class="hover:text-brand-400 transition">Privacidad</a>
                     <a href="#" onclick="rpSoporte();return false" class="hover:text-brand-400 transition">Soporte</a>
                 </div>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <a href="/legal/baja" rel="nofollow" class="hover:text-brand-400 transition">Pedir baja o corrección de una ficha</a>
+                    <a href="/legal/denuncia" rel="nofollow" class="hover:text-brand-400 transition">Denunciar contenido</a>
+                </div>
                 <div class="flex items-center gap-4">
                     <span class="flex items-center gap-1"><i class="fas fa-lock text-green-500"></i> SSL Seguro</span>
                     <span class="text-gray-500">Un producto <a href="https://www.hepta.com.py/" target="_blank" class="text-brand-400 hover:underline">HEPTA GROUP</a></span>
                 </div>
             </div>
         </div>
+        <p id="footerOperator" class="max-w-7xl mx-auto px-4 mt-4 text-xs text-gray-600 text-center md:text-left"></p>
     </footer>
 
     <!-- MODAL PERFIL EMPRESA -->
@@ -1000,6 +1005,14 @@
                     <label class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
                     <input type="password" id="regPassword" required minlength="6" class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
                 </div>
+                <label class="flex items-start gap-2 text-sm text-gray-600">
+                    <input type="checkbox" id="regTerms" required class="mt-1 w-4 h-4">
+                    <span>Leí y acepto los <a href="/terminos.html" target="_blank" rel="noopener" class="text-brand-600 underline">Términos</a> y la <a href="/privacidad.html" target="_blank" rel="noopener" class="text-brand-600 underline">Política de Privacidad</a><span class="legalVer"></span></span>
+                </label>
+                <label class="flex items-start gap-2 text-sm text-gray-600">
+                    <input type="checkbox" id="regMarketing" class="mt-1 w-4 h-4">
+                    <span>Quiero recibir novedades y ofertas de RetoPA por correo y WhatsApp <span class="text-gray-400">(opcional)</span></span>
+                </label>
                 <button type="submit" class="w-full btn-brand text-white py-3 rounded-xl font-bold shadow-lg">
                     Crear cuenta
                 </button>

@@ -5,6 +5,7 @@ const jwt        = require('jsonwebtoken');
 const crypto     = require('crypto');
 const rateLimit  = require('express-rate-limit');
 const pool       = require('../db');
+const { recordAcceptance } = require('./legal.routes');
 
 const JWT_SECRET  = require('../config/jwt');
 const { mobilePY } = require('../helpers/claimFlow');
@@ -244,6 +245,8 @@ router.post('/register', sensitiveLimiter, async (req, res) => {
     const { email, password, name, phone } = req.body;
     if (!email || !password || !name)
       return res.status(400).json({ success: false, error: 'Email, contraseña y nombre son requeridos' });
+    if (req.body.acepta_terminos !== true)
+      return res.status(400).json({ success: false, code: 'TERMS_REQUIRED', error: 'Para crear la cuenta tenés que aceptar los Términos y la Política de Privacidad.' });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return res.status(400).json({ success: false, error: 'Email inválido' });
     if (password.length < 6)
@@ -260,6 +263,7 @@ router.post('/register', sensitiveLimiter, async (req, res) => {
     );
     const user  = result.rows[0];
     await markPasswordSet(user.id);
+    await recordAcceptance(pool, user.id, req.body.marketing_opt_in === true);
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, loginAt: nowSec() }, JWT_SECRET, { expiresIn: getTokenExpiry(user.role) });
 
     // VERIFICACIÓN DE CORREO: enviamos el link mágico y NO enganchamos fichas

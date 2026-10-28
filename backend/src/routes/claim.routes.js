@@ -46,6 +46,7 @@ const pool = new Pool({
     user:     process.env.DB_USER     || process.env.POSTGRES_USER,
     password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD,
 });
+const { recordAcceptance } = require('./legal.routes');
 
 function generateToken() {
     return crypto.randomBytes(32).toString('hex'); // 64 chars hex
@@ -192,6 +193,7 @@ router.post('/confirm', confirmLimiter, async (req, res) => {
     if (!wa) return fail(400, 'whatsapp_invalid', 'Revisá tu número de WhatsApp (ej: 0981 123 456).');
     if (name.length < 2) return fail(400, 'name_missing', 'Decinos tu nombre.');
     if (email && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) return fail(400, 'email_invalid', 'Revisá tu correo, o dejalo vacío.');
+    if (b.acepta_terminos !== true) return fail(400, 'terms_required', 'Para reclamar tenés que aceptar los Términos y la Política de Privacidad.');
 
     const client = await pool.connect();
     try {
@@ -240,6 +242,7 @@ router.post('/confirm', confirmLimiter, async (req, res) => {
              RETURNING id, name, email, role`,
             [name, email || null, randomHash, normalizePhone('0' + wa.slice(3)), phoneVerified ? new Date() : null])).rows[0];
         await client.query('UPDATE claim_snapshots SET user_id=$1 WHERE id=$2', [u.id, snap.rows[0].id]);
+        await recordAcceptance(client, u.id, b.marketing_opt_in === true);
 
         // Si dejó correo: token para confirmarlo (7 días). No bloquea nada: el
         // correo es opcional; confirmarlo además le da un acceso a su panel.
@@ -760,6 +763,7 @@ router.post('/alta', altaLimiter, async (req, res) => {
     if (!wa) return bad('whatsapp_invalid', 'Revisá el WhatsApp (ej: 0981 123 456).');
     if (!me && name.length < 2) return bad('name_missing', 'Decinos tu nombre.');
     if (!me && email && !EMAIL_RE.test(email)) return bad('email_invalid', 'Revisá el correo, o dejalo vacío.');
+    if (b.acepta_terminos !== true) return bad('terms_required', 'Para registrar el negocio tenés que aceptar los Términos y la Política de Privacidad.');
 
     try {
         const rub = await pool.query(
@@ -842,6 +846,7 @@ router.post('/alta', altaLimiter, async (req, res) => {
             await client.query(
                 `INSERT INTO user_businesses (user_id, business_id, is_owner, can_edit) VALUES ($1, $2, TRUE, TRUE)
                  ON CONFLICT (user_id, business_id) DO UPDATE SET is_owner = TRUE, can_edit = TRUE`, [u.id, biz.id]);
+            await recordAcceptance(client, u.id, b.marketing_opt_in === true);
             // Lead de captación (Captación / Leads: "Nuevo · por verificar" + asistente de duplicados).
             await client.query(
                 `INSERT INTO service_leads (business_id, business_name, service_type, status, contact_name, contact_email, contact_phone, notes, created_at, updated_at)

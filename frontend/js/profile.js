@@ -542,6 +542,13 @@ async function openProfile(slug) {
                     </div>
                 </div>
             </div>
+            ${biz.publicSource && biz.publicSource.fuente ? (() => {
+                // Atribución de fuente pública (Decreto 4064/2015) + disparador de reclamo.
+                const m = String(biz.publicSource.fecha || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+                const fecha = m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+                const ficha = encodeURIComponent(location.origin + '/negocio/' + biz.slug);
+                return `<p class="mt-6 text-xs text-gray-400 leading-relaxed">Datos de contacto iniciales obtenidos de registros públicos (${escHtml(biz.publicSource.fuente)}${fecha ? ', ' + fecha : ''}). ¿Es tu negocio? ${biz.hasOwner ? '' : `<a href="/reclamar/?ficha=${encodeURIComponent(biz.slug)}" class="text-brand-600 underline">Reclamalo</a> o `}<a href="/legal/baja?ficha=${ficha}" rel="nofollow" class="text-brand-600 underline">pedí corrección</a>.</p>`;
+            })() : ''}
         </div>
         ${fichaActionsBar}
     `;

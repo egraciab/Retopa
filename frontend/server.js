@@ -124,6 +124,9 @@ a{display:inline-block;background:#0284c7;color:#fff;text-decoration:none;font-w
 <a href="${siteUrl}/">Ir al inicio</a></div></body></html>`);
 }
 
+// '2026-06-10' → '10/06/2026'
+function fechaDMY(ymd) { const m = String(ymd || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; }
+
 function esc(str) {
   if (!str) return '';
   return String(str)
@@ -436,6 +439,7 @@ function buildBusinessHTML(biz, siteConfig) {
     .reviews .rev{border-top:1px solid #eef2f7;padding:10px 0}.reviews p{color:#475569;font-size:14px;margin:4px 0}.reviews .who{color:#94a3b8;font-size:12px}
     .cta{margin-top:20px}.cta a{color:#0284c7;font-weight:700;text-decoration:none}
     .ft{text-align:center;color:#94a3b8;font-size:12px;padding:18px}.ft a{color:#0284c7;text-decoration:none;font-weight:700}
+    .ft .ftl a{font-weight:600}.src{font-size:12px;color:#94a3b8;margin:14px 0 0}.src a{color:#0284c7}
     @media(max-width:640px){.cover{height:160px}h1{font-size:1.4rem}.cbody{padding:16px}}
   </style>
 </head>
@@ -474,12 +478,13 @@ function buildBusinessHTML(biz, siteConfig) {
         ${_socialHtml}
         ${_reviewsHtml}
 
+        ${biz.publicSource && biz.publicSource.fuente ? `<p class="src">Datos de contacto iniciales obtenidos de registros públicos (${esc(biz.publicSource.fuente)}, ${esc(fechaDMY(biz.publicSource.fecha))}). ¿Es tu negocio? ${biz.hasOwner ? '' : `<a href="/reclamar/?ficha=${encodeURIComponent(biz.slug)}">Reclamalo</a> o `}<a href="/legal/baja?ficha=${encodeURIComponent(pageUrl)}" rel="nofollow">pedí corrección</a>.</p>` : ''}
         <div class="cta"><a href="/?empresa=${esc(biz.slug)}">Ver galería, dejar una reseña y más →</a></div>
         <div class="cta"><a href="/negocios/${esc(catSlug)}/${esc(citySlug)}">Ver más ${esc(biz.categoryName || 'negocios')} en ${esc(biz.city || 'Paraguay')} →</a></div>
       </div>
     </article>
 
-    <footer class="ft"><a href="/">RetoPA</a> — El ecosistema comercial de Paraguay</footer>
+    <footer class="ft"><a href="/">RetoPA</a> — El ecosistema comercial de Paraguay<br>${legalPages.legalFooterHtml()}</footer>
   </div>
 
   <noscript><p style="text-align:center;color:#94a3b8;font-size:13px;padding:12px">Para la experiencia completa, activá JavaScript.</p></noscript>
@@ -792,7 +797,7 @@ function buildHomeHTML(siteConfig, stats) {
 // (bajo /js, /admin/js, ...) NO se ven afectados: solo se bloquea la raíz sensible.
 const BLOCKED_FILES = new Set([
   '/server.js', '/package.json', '/package-lock.json', '/dockerfile',
-  '/tailwind.config.js', '/.env', '/.env.example',
+  '/tailwind.config.js', '/.env', '/.env.example', '/legal-pages.js',
 ]);
 const BLOCKED_PREFIXES = ['/node_modules/', '/.git/'];
 app.use((req, res, next) => {
@@ -802,6 +807,12 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// ── Páginas legales (2026-10-28): /terminos.html y /privacidad.html desde el
+// backend (editables en Admin), /legal/baja y /legal/denuncia. Van ANTES del
+// static: el .html estático queda solo como respaldo si el backend no responde.
+const legalPages = require('./legal-pages');
+legalPages.register(app, { fetchBackend, siteUrl: SITE_URL, staticDir: __dirname });
 
 // ── Archivos estáticos (antes de las rutas dinámicas) ─────────────────────
 // Cache-busting: los .js/.css/.html se revalidan SIEMPRE (Cache-Control:no-cache).
@@ -1385,6 +1396,7 @@ function buildCategoryHTML(o) {
     .mapph{margin:16px 0;background:#e2e8f0;border-radius:14px;height:110px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px}
     .cta{margin:20px 0;text-align:center}.cta a{color:#0284c7;font-weight:700;text-decoration:none}
     .ft{text-align:center;color:#94a3b8;font-size:12px;padding:18px}.ft a{color:#0284c7;text-decoration:none;font-weight:700}
+    .ft .ftl a{font-weight:600}.src{font-size:12px;color:#94a3b8;margin:14px 0 0}.src a{color:#0284c7}
     @media(max-width:640px){.th{width:60px;height:60px}}
   </style>
 </head>
@@ -1399,7 +1411,7 @@ function buildCategoryHTML(o) {
     ${linksHtml}
     <div class="mapph" id="mapPlaceholder">📍 Ubicaciones disponibles en el buscador</div>
     <div class="cta"><a href="/negocios">Buscar y filtrar todo el directorio →</a></div>
-    <footer class="ft"><a href="/">RetoPA</a> — El ecosistema comercial de Paraguay</footer>
+    <footer class="ft"><a href="/">RetoPA</a> — El ecosistema comercial de Paraguay<br>${legalPages.legalFooterHtml()}</footer>
   </div>
 </body>
 </html>`;
@@ -1755,7 +1767,7 @@ function buildOfertasHTML(o) {
     ${grid}
     ${chips}
     <div class="octa"><a href="/negocios">Ver todo el directorio &rarr;</a></div>
-    <footer class="oft"><a href="/">RetoPA</a> — El ecosistema comercial de Paraguay</footer>
+    <footer class="oft"><a href="/">RetoPA</a> — El ecosistema comercial de Paraguay<br>${legalPages.legalFooterHtml()}</footer>
   </div>
   <script>
   (function(){

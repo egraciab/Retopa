@@ -228,6 +228,16 @@ async function loadPublicSiteConfig() {
         renderFooterLinks('footerCol2Links', s.footer_col2_links);
         renderFooterLinks('footerCol3Links', s.footer_col3_links);
         renderFooterLinks('footerCol4Links', s.footer_col4_links);
+
+        // Páginas legales (2026-10-28): "marca operada por…" y aviso de cambio sustancial.
+        if (s.legal_razon_social) {
+            const el = document.getElementById('footerOperator');
+            if (el) el.textContent = `RetoPA es una marca operada por ${s.legal_razon_social}${s.legal_ruc ? ' · RUC ' + s.legal_ruc : ''}`;
+        }
+        showLegalBanner(s);
+        if (s.legal_terminos_version) document.querySelectorAll('.legalVer').forEach(el => {
+            el.textContent = ` (versión ${s.legal_terminos_version}${s.legal_privacidad_version && s.legal_privacidad_version !== s.legal_terminos_version ? ' / ' + s.legal_privacidad_version : ''})`;
+        });
         if (s.services_label) {
             const el = document.getElementById('servicesLabel');
             if (el) el.textContent = s.services_label;
@@ -554,4 +564,26 @@ async function trackPromoClick(id) {
 function openPromoDetail(id, bizSlug) {
     trackPromoClick(id);
     if (bizSlug && typeof openProfile === 'function') openProfile(bizSlug);
+}
+
+// ── Aviso de cambio sustancial en Términos / Privacidad (2026-10-28) ─────────
+// Se muestra hasta legal_banner_hasta (15 días desde la publicación). Al cerrarlo
+// no vuelve para esa misma publicación.
+function showLegalBanner(s) {
+    const hasta = s && s.legal_banner_hasta;
+    if (!hasta || !/^\d{4}-\d{2}-\d{2}$/.test(hasta)) return;
+    const today = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10); // Paraguay
+    if (hasta < today) return;
+    const key = 'retopa_legal_banner_off';
+    const tag = `${hasta}|${s.legal_terminos_version || ''}|${s.legal_privacidad_version || ''}`;
+    try { if (localStorage.getItem(key) === tag) return; } catch (e) {}
+    if (document.getElementById('legalBanner')) return;
+    const bar = document.createElement('div');
+    bar.id = 'legalBanner';
+    bar.setAttribute('role', 'status');
+    bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:9990;max-width:640px;margin:0 auto;background:#1B3A6B;color:#fff;border-radius:14px;padding:12px 44px 12px 16px;font-size:14px;line-height:1.45;box-shadow:0 8px 28px rgba(0,0,0,.25)';
+    bar.innerHTML = 'Actualizamos los <a href="/terminos.html" style="color:#ffd27a;font-weight:700">Términos</a> y la <a href="/privacidad.html" style="color:#ffd27a;font-weight:700">Política de Privacidad</a>. Te recomendamos leerlos.' +
+        '<button type="button" aria-label="Cerrar" style="position:absolute;right:8px;top:6px;background:none;border:0;color:#fff;font-size:22px;line-height:1;cursor:pointer;padding:6px">&times;</button>';
+    bar.querySelector('button').onclick = () => { bar.remove(); try { localStorage.setItem(key, tag); } catch (e) {} };
+    document.body.appendChild(bar);
 }

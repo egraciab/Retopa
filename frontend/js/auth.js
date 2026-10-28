@@ -294,7 +294,9 @@ document.getElementById('registerForm').addEventListener('submit', async functio
     const res = await apiPost('/auth/register', {
         name: document.getElementById('regName').value,
         email: document.getElementById('regEmail').value,
-        password: document.getElementById('regPassword').value
+        password: document.getElementById('regPassword').value,
+        acepta_terminos: document.getElementById('regTerms').checked,          // obligatorio (lo valida el servidor)
+        marketing_opt_in: document.getElementById('regMarketing').checked      // separado y opcional
     });
 
     if (res.success) {

@@ -53,6 +53,9 @@ app.use('/api/v2', directoryRoutes);
 app.use('/api/v2', citiesRoutes);
 app.use('/api/v2/auth', authPublicRoutes);
 app.use('/api/v2/admin/prospects', prospectsRoutes); // Prospectos (antes que adminRoutes por especificidad)
+const legalRoutes = require('./routes/legal.routes'); // Páginas legales (2026-10-28)
+app.use('/api/v2/legal', legalRoutes.publicRouter);
+app.use('/api/v2/admin/legal', legalRoutes.adminRouter); // antes que adminRoutes, como Prospectos
 app.use('/api/v2/admin', adminRoutes);
 app.use('/api/v2/admin/notify', adminNotifyRoutes);
 app.use('/api/v2/claim',        claimV2Routes);

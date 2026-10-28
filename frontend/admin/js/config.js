@@ -162,7 +162,7 @@ function showSection(section) {
         businesses:'directorio', uncategorized:'directorio', categories:'directorio', cities:'directorio',
         leads:'comercial', prospectos:'comercial', claims:'comercial', 'promotions-admin':'comercial', users:'comercial', semaforo:'comercial', 'plan-requests':'comercial', monetizacion:'comercial', signals:'comercial',
         import:'marketing', notify:'marketing', templates:'marketing', emaillogs:'marketing',
-        plans:'config', services:'config', site:'config', settings:'config', logros:'config'
+        plans:'config', services:'config', site:'config', legal:'config', settings:'config', logros:'config'
     };
     const grp = sectionGroup[section];
     if (grp) {
@@ -174,7 +174,7 @@ function showSection(section) {
         }
     }
 
-    const titles = { dashboard: 'Dashboard', businesses: 'Empresas', leads: 'Captación / Leads', prospectos: 'Prospectos', users: 'Usuarios', categories: 'Rubros', plans: 'Planes', cities: 'Ciudades', site: 'Sitio Web', import: 'Importar empresas', settings: 'Configuración', claims: 'Claims', templates: 'Plantillas', emaillogs: 'Logs de correos', notify: 'Notificar empresas', 'promotions-admin': 'Promociones', services: 'Servicios', uncategorized: 'Sin rubro', semaforo: 'Semáforo de ventas', 'plan-requests': 'Solicitudes de plan', monetizacion: 'Informe de monetización', signals: 'Disparadores de venta', logros: 'Logros' };
+    const titles = { dashboard: 'Dashboard', businesses: 'Empresas', leads: 'Captación / Leads', prospectos: 'Prospectos', users: 'Usuarios', categories: 'Rubros', plans: 'Planes', cities: 'Ciudades', site: 'Sitio Web', import: 'Importar empresas', settings: 'Configuración', claims: 'Claims', templates: 'Plantillas', emaillogs: 'Logs de correos', notify: 'Notificar empresas', 'promotions-admin': 'Promociones', services: 'Servicios', uncategorized: 'Sin rubro', semaforo: 'Semáforo de ventas', 'plan-requests': 'Solicitudes de plan', monetizacion: 'Informe de monetización', signals: 'Disparadores de venta', logros: 'Logros', legal: 'Páginas legales' };
     document.getElementById('pageTitle').textContent = titles[section] || section;
     currentSection = section;
 
@@ -202,6 +202,7 @@ function showSection(section) {
     if (section === 'uncategorized') initUncategorizedSection();
     if (section === 'settings') loadSettings();
     if (section === 'logros') { if (typeof initLogrosSection === 'function') initLogrosSection(); }
+    if (section === 'legal') { if (typeof initLegalSection === 'function') initLegalSection(); }
 
     // Detener polling en tiempo real si salimos del dashboard
     if (section !== 'dashboard' && typeof stopLivePolling === 'function') stopLivePolling();

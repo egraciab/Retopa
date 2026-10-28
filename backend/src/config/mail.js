@@ -774,6 +774,53 @@ const templates = {
         </div>`
     }),
 
+    // ── Páginas legales (2026-10-28): aviso de cambio sustancial a titulares ──
+    // Aviso de SERVICIO (no comercial). Campos editables: subject, message.
+    legal_update: (data, t) => {
+        const esc = s => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const first = String(data.name || '').trim().split(/\s+/)[0] || '';
+        const site = esc(data.siteUrl || 'https://retopa.com.py');
+        return {
+            subject: t('subject', `Actualizamos los Términos y la Política de Privacidad de ${data.siteName || 'RetoPA'}`),
+            html: `
+        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:32px auto;background:white;border-radius:20px;padding:28px 32px;box-shadow:0 4px 24px rgba(0,0,0,0.08);font-size:15px;color:#0f172a;line-height:1.55">
+          <p style="margin:0 0 12px">Hola${first ? ' ' + esc(first) : ''},</p>
+          <p style="margin:0 0 16px">${t('message', `Hicimos cambios importantes en nuestros Términos y Condiciones y en nuestra Política de Privacidad. Te avisamos con anticipación para que puedas leerlos con tiempo.`)}</p>
+          <ul style="margin:0 0 16px;padding-left:20px">
+            <li><a href="${site}/terminos.html" style="color:#1B3A6B;font-weight:700">Términos y Condiciones</a> (versión ${esc(data.terminosVersion)})</li>
+            <li><a href="${site}/privacidad.html" style="color:#1B3A6B;font-weight:700">Política de Privacidad</a> (versión ${esc(data.privacidadVersion)})</li>
+          </ul>
+          <p style="margin:0 0 12px;font-size:14px;color:#334155">Si no estás de acuerdo, podés dejar de usar el servicio y cerrar tu cuenta. Los planes pagos que ya contrataste no cambian durante el período en curso.</p>
+          <p style="margin:0;font-size:13px;color:#64748b">Este es un aviso de servicio para titulares de cuenta de ${esc(data.siteName || 'RetoPA')}; no es un correo comercial.</p>
+        </div>`
+        };
+    },
+
+    // Pedido de baja / rectificación / retiro sin cuenta → buzones de leads.
+    legalRequestAlert: (data) => {
+        const esc = s => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const TIPO = { baja: 'Baja de ficha', rectificacion: 'Rectificación', actualizacion: 'Actualización', retiro: 'Denuncia / retiro de contenido' };
+        const row = (k, v) => v ? `<tr><td style="padding:6px 0;color:#64748b;width:130px;vertical-align:top">${k}</td><td style="padding:6px 0;color:#0f172a">${v}</td></tr>` : '';
+        return {
+            subject: `⚖️ ${TIPO[data.tipo] || 'Pedido legal'} #${data.id}${data.businessName ? ' — ' + data.businessName : ''}`,
+            html: `
+        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:32px auto;background:white;border-radius:20px;padding:28px 32px;box-shadow:0 4px 24px rgba(0,0,0,0.08);font-size:14px">
+          <h2 style="margin:0 0 14px;color:#1B3A6B;font-size:18px">${esc(TIPO[data.tipo] || 'Pedido legal')} · #${esc(data.id)}</h2>
+          <table style="width:100%;border-collapse:collapse">
+            ${row('Ficha', esc(data.businessName) || '<i>no la encontramos por el enlace</i>')}
+            ${row('Enlace', esc(data.businessUrl))}
+            ${row('Nombre', esc(data.nombre))}
+            ${row('Contacto', esc(data.contacto))}
+            ${row('Vínculo', esc(data.vinculo))}
+            ${row('Pedido', esc(data.detalle).replace(/\n/g, '<br>'))}
+          </table>
+          <p style="margin:18px 0 0;font-size:13px;color:#64748b">Plazo: ${data.tipo === 'retiro' ? '5' : '10'} días hábiles. Gestionalo en Admin → Páginas legales${data.siteUrl ? ` (<a href="${esc(data.siteUrl)}/admin">abrir</a>)` : ''}.</p>
+        </div>`
+        };
+    },
+
     // ── Login sin contraseña: link de acceso de un uso (2026-10-13) ──────────
     accessLink: (data) => {
         const esc = s => String(s == null ? '' : s)
