@@ -15,10 +15,14 @@ Este archivo es el punto de contacto entre Steve, Claude en la app (chat/móvil)
 
 ## Entornos y hosts
 
-| Nombre | Qué es | Ruta |
+Son **dos VMs separadas**, cada una con su propio Claude Code:
+
+| VM | Qué es | Ruta del proyecto |
 |---|---|---|
-| `retopa-core` | **Producción.** Host donde corre el stack real. | `/opt/retopa` |
-| `dev` | Entorno de desarrollo, sincronizado desde prod con datos anonimizados (`scripts/`). | — |
+| `retopa-core` | **Producción.** Corre el stack real. Nada se prueba acá. | `/opt/retopa` |
+| `retopa-dev` | **Desarrollo.** Se sincroniza desde prod con datos anonimizados (`scripts/`). Acá se desarrolla y prueba todo antes de pasar a prod. | `/opt/retopa` (confirmar) |
+
+Antes de cualquier acción, Claude Code debe saber en qué VM está (`hostname`) y actuar en consecuencia: en `retopa-core` solo deploy y hotfix aprobados; el trabajo normal va en `retopa-dev`.
 | Subida de paquetes | Carpeta donde Steve deja tar.gz para aplicar en prod. | `/home/hepta/claude/` |
 
 - La base en Docker es el contenedor `retopa-db`; usuario y base: `retopa`. La configuración del sitio vive en la tabla `site_config` (key/value).
@@ -83,7 +87,7 @@ docs/                # CHANGELOG-legal.md, informes, historico/ (DEPLOY_*, READM
 
 > Steve o Claude (chat) agregan ítems acá. Claude Code en los hosts los ejecuta y los mueve a "Hecho".
 
-- [ ] 2026-10-30 — Separar claramente los entornos `core` (prod) y `dev`: documentar en este archivo cómo se crea/sincroniza `dev`, qué host y ruta usa, y asegurar que `scripts/` distinga ambos sin tocar prod por accidente. (Pedido por Steve; se detalla mañana.)
+- [ ] 2026-10-30 — Separar claramente los flujos de `retopa-core` (prod) y `retopa-dev` (dev): documentar en este archivo cómo se crea/sincroniza `retopa-dev`, confirmar su ruta, y asegurar que `scripts/` distinga ambos sin tocar prod por accidente. (Pedido por Steve; se detalla mañana.)
 
 ## Hecho
 
