@@ -20,7 +20,7 @@ Son **dos VMs separadas**, cada una con su propio Claude Code:
 | VM | Qué es | Ruta del proyecto |
 |---|---|---|
 | `retopa-core` | **Producción.** Corre el stack real. Nada se prueba acá. | `/opt/retopa` |
-| `retopa-dev` | **Desarrollo.** Se sincroniza desde prod con datos anonimizados (`scripts/`). Acá se desarrolla y prueba todo antes de pasar a prod. | `/opt/retopa` (confirmar) |
+| `retopa-dev` | **Desarrollo.** Se sincroniza desde prod con datos anonimizados (`scripts/`). Acá se desarrolla y prueba todo antes de pasar a prod. | `/opt/retopa` (clon de core, misma ruta) |
 
 Antes de cualquier acción, Claude Code debe saber en qué VM está (`hostname`) y actuar en consecuencia: en `retopa-core` solo deploy y hotfix aprobados; el trabajo normal va en `retopa-dev`.
 | Subida de paquetes | Carpeta donde Steve deja tar.gz para aplicar en prod. | `/home/hepta/claude/` |
@@ -87,7 +87,7 @@ docs/                # CHANGELOG-legal.md, informes, historico/ (DEPLOY_*, READM
 
 > Steve o Claude (chat) agregan ítems acá. Claude Code en los hosts los ejecuta y los mueve a "Hecho".
 
-- [ ] 2026-10-30 — Separar claramente los flujos de `retopa-core` (prod) y `retopa-dev` (dev): documentar en este archivo cómo se crea/sincroniza `retopa-dev`, confirmar su ruta, y asegurar que `scripts/` distinga ambos sin tocar prod por accidente. (Pedido por Steve; se detalla mañana.)
+- [ ] 2026-10-30 — Separar claramente los flujos de `retopa-core` (prod) y `retopa-dev` (dev): documentar en este archivo cómo se crea/sincroniza `retopa-dev`, y asegurar que `scripts/` distinga ambos sin tocar prod por accidente. (Pedido por Steve; se detalla mañana.)
 
 ## Hecho
 
