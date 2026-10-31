@@ -218,19 +218,32 @@ router.patch('/outreach/:whatsapp', async (req, res) => {
         if (estado && !ESTADOS.includes(estado)) {
             return res.status(400).json({ success: false, error: `Estado inválido. Permitidos: ${ESTADOS.join(', ')}` });
         }
-        const nuevoEstado = estado || 'pendiente';
-        const setFecha = nuevoEstado === 'enviado'; // marcar fecha al enviar
+        // Sin estado (guardar notas) se conserva el que tenga; fila nueva → 'pendiente'.
+        const nuevoEstado = estado || null;
+        // envio=true: el operador mandó el mensaje (botón WhatsApp). Renueva la fecha,
+        // pero no baja un estado más avanzado (respondio/reclamo/…) a 'enviado'.
+        const envio = req.body?.envio === true && nuevoEstado === 'enviado';
 
+        // fecha_contacto: con un envío real, o la primera vez que se marca 'enviado'
+        // a mano. Antes cada PATCH con 'enviado' (incluido guardar notas) la pisaba.
         const { rows } = await pool.query(`
             INSERT INTO prospect_wa_outreach (whatsapp, estado, notas, fecha_contacto, created_at, updated_at)
-            VALUES ($1, $2, $3, CASE WHEN $4 THEN NOW() ELSE NULL END, NOW(), NOW())
+            VALUES ($1, COALESCE($2::varchar, 'pendiente'), $3,
+                    CASE WHEN $2::varchar = 'enviado' THEN NOW() END, NOW(), NOW())
             ON CONFLICT (whatsapp) DO UPDATE SET
-                estado         = EXCLUDED.estado,
+                estado         = CASE
+                                   WHEN $2::varchar IS NULL THEN prospect_wa_outreach.estado
+                                   WHEN $4::boolean AND prospect_wa_outreach.estado NOT IN ('pendiente', 'enviado')
+                                        THEN prospect_wa_outreach.estado
+                                   ELSE $2::varchar END,
                 notas          = COALESCE(EXCLUDED.notas, prospect_wa_outreach.notas),
-                fecha_contacto = CASE WHEN $4 THEN NOW() ELSE prospect_wa_outreach.fecha_contacto END,
+                fecha_contacto = CASE
+                                   WHEN $4::boolean THEN NOW()
+                                   WHEN $2::varchar = 'enviado' AND prospect_wa_outreach.fecha_contacto IS NULL THEN NOW()
+                                   ELSE prospect_wa_outreach.fecha_contacto END,
                 updated_at     = NOW()
             RETURNING whatsapp, estado, fecha_contacto, notas`,
-            [whatsapp, nuevoEstado, (notas === undefined ? null : notas), setFecha]
+            [whatsapp, nuevoEstado, (notas === undefined ? null : notas), envio]
         );
         res.json({ success: true, data: rows[0] });
     } catch (err) {

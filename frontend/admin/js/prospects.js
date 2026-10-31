@@ -368,7 +368,8 @@ async function prospectWhatsAppClaim(whatsapp, group) {
 
 async function prospectSetEstado(whatsapp, estado, fromSend) {
     if (!whatsapp) return;
-    const res = await apiAdminPost('/prospects/outreach/' + encodeURIComponent(whatsapp), { estado }, 'PATCH');
+    // envio: el servidor renueva la fecha solo en un envío real, no al cambiar el select.
+    const res = await apiAdminPost('/prospects/outreach/' + encodeURIComponent(whatsapp), { estado, envio: !!fromSend }, 'PATCH');
     if (res && res.success) {
         const g = _prospAll.find(x => x.whatsapp === whatsapp);
         if (g && res.data) { g.estado = res.data.estado; g.fecha_contacto = res.data.fecha_contacto; if (res.data.notas != null) g.notas = res.data.notas; }
@@ -382,7 +383,9 @@ async function prospectSetEstado(whatsapp, estado, fromSend) {
 async function prospectSaveNotas(whatsapp, notas) {
     if (!whatsapp) return;
     const g = _prospAll.find(x => x.whatsapp === whatsapp);
-    const estado = (g && g.estado) || 'pendiente';
-    const res = await apiAdminPost('/prospects/outreach/' + encodeURIComponent(whatsapp), { estado, notas }, 'PATCH');
+    // El onblur salta aunque no se haya escrito nada: sin cambios, no se guarda.
+    if (g && (g.notas || '') === (notas || '')) return;
+    // Sin estado: el servidor conserva el actual (el de esta pantalla puede estar viejo).
+    const res = await apiAdminPost('/prospects/outreach/' + encodeURIComponent(whatsapp), { notas }, 'PATCH');
     if (res && res.success && g && res.data) { g.notas = res.data.notas; g.estado = res.data.estado; }
 }
