@@ -23,11 +23,18 @@ Son **dos VMs separadas**, cada una con su propio Claude Code:
 | `retopa-dev` | **Desarrollo.** Se sincroniza desde prod con datos anonimizados (`scripts/`). Acá se desarrolla y prueba todo antes de pasar a prod. | `/opt/retopa` (clon de core, misma ruta) |
 
 Antes de cualquier acción, Claude Code debe saber en qué VM está (`hostname`) y actuar en consecuencia: en `retopa-core` solo deploy y hotfix aprobados; el trabajo normal va en `retopa-dev`.
-| Subida de paquetes | Carpeta donde Steve deja tar.gz para aplicar en prod. | `/home/hepta/claude/` |
 
+- Paquetes para aplicar: Steve deja los `tar.gz` en `/home/hepta/claude/` (en cada VM).
 - La base en Docker es el contenedor `retopa-db`; usuario y base: `retopa`. La configuración del sitio vive en la tabla `site_config` (key/value).
 - `scripts/git-commit-prod.sh` commitea lo que está vivo en prod; corre **solo** en `retopa-core` desde `/opt/retopa`, nunca hace push y bloquea `.env`, dumps, CSV y secretos.
-- Deploy clásico: tar.gz con la estructura correcta → extraer en `/` del server → `docker compose down && docker compose up -d --build`.
+- Deploy por paquete (dev primero, después prod), según su `_deploy/DEPLOY_<nombre>.txt`:
+  `retopa_<nombre>.tar.gz` con rutas `opt/retopa/...` + `_deploy/base_<nombre>.sha256` (huella de los archivos de prod que reemplaza).
+  1. Chequeo de base (`sha256sum -c`); cualquier FAILED → parar.
+  2. Backup: `pg_dump -Fc` a `/opt/retopa/backups/` y copia de los archivos a reemplazar en `/home/hepta/claude/bak_<nombre>_<fecha>/`.
+  3. Migración en seco (`COMMIT` → `ROLLBACK`).
+  4. `tar xzf … -C /` y migración de verdad.
+  5. `docker compose up -d --build backend frontend` (sin `down`: la base y redis siguen arriba).
+- Dev se pone igual a prod con `scripts/sync-dev-desde-prod.sh plan|apply`, desde un nodo del clúster. Borra lo que solo exista en dev: el trabajo en curso va en una rama de GitHub, no sin commitear en dev.
 
 ## Estructura del repo
 

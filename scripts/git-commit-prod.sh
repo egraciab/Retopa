@@ -35,16 +35,18 @@ if [ -n "$PII" ] && [ "${PII_OK:-}" != "1" ]; then
 fi
 N=$(git diff --cached --name-only | wc -l)
 [ "$N" -gt 0 ] || { echo "Nada para commitear: el repo ya está igual a producción."; exit 0; }
-LAST=$(git log -1 --format=%cI)
+# Referencia = último commit de producción, no el último cualquiera (un commit de
+# docs posterior al deploy dejaba la lista vacía: "ver git diff").
+REF=$(git log -1 --grep='^Producción al ' --format=%h); REF=${REF:-$(git log -1 --format=%h)}
+LAST=$(git log -1 --format=%cI "$REF")
 PKGS=$(find _deploy -maxdepth 1 -name 'DEPLOY_*.txt' -newermt "$LAST" -printf '%f\n' 2>/dev/null | sed 's/^DEPLOY_//; s/\.txt$//' | sort | paste -sd, - | sed 's/,/, /g')
 git commit -q -F - <<MSG
 Producción al $(date +%F): paquetes aplicados desde el último commit
 
-Paquetes (según _deploy/DEPLOY_*.txt posteriores a $(git log -1 --format=%h)): ${PKGS:-ver git diff}
+Paquetes (según _deploy/DEPLOY_*.txt posteriores a $REF): ${PKGS:-ver git diff}
 $N archivos.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01UJyKHiik27jt1q5QUv3Ms5
 MSG
 echo "Commits que se van a subir:"; git --no-pager log --oneline "$BASE..HEAD"
 echo; echo "TODOS los archivos que se van a subir:"; git --no-pager diff --stat=120 "$BASE" HEAD | cat
